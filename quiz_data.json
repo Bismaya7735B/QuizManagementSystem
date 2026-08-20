@@ -1,0 +1,50 @@
+{
+    "questions": [
+        {
+            "branch": "BTech 5th Sem",
+            "text": "Find out the time period 'T' of a signal if the frequency is 10GHz ?",
+            "type": "Numerical",
+            "marks": 1,
+            "options": [],
+            "correct": 10.0,
+            "unit": "ns"
+        },
+        {
+            "branch": "BTech 5th Sem",
+            "text": "Calculate the bandwidth of a composite signal if the signals are broken down into 100KHz,200KHz,30KHz,900KHz,278KHz,1091KHz,91KHz ?",
+            "type": "Numerical",
+            "marks": 1,
+            "options": [],
+            "correct": 1061.0,
+            "unit": "KHz"
+        },
+        {
+            "branch": "BCA 2nd Sem",
+            "text": "C++ follows which designing approach ?",
+            "type": "MCQ",
+            "marks": 1,
+            "options": [
+                "Top-Down",
+                "Bottom-Up",
+                "Bottom-Down",
+                "Top-Up"
+            ],
+            "correct": "Bottom-Up",
+            "unit": ""
+        },
+        {
+            "branch": "BCA 2nd Sem",
+            "text": "Is C OOP oriented ?",
+            "type": "MCQ",
+            "marks": 1,
+            "options": [
+                "True",
+                "False"
+            ],
+            "correct": "True",
+            "unit": ""
+        }
+    ],
+    "scores": {},
+    "settings": {}
+}
