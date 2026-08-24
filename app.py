@@ -1,27 +1,21 @@
 import streamlit as st
-import json
-import os
 import pandas as pd
 import time
+from supabase import create_client, Client
 
 # --- PAGE CONFIGURATION & STYLING ---
 st.set_page_config(page_title="Pro Quiz Portal", page_icon="🎓", layout="centered")
 
-# Custom CSS to make the app look attractive
+# Custom CSS styling
 st.markdown("""
 <style>
-    /* Main container styling */
     .stApp {
         background-color: #f8f9fa;
     }
-    
-    /* Headers */
     h1, h2, h3 {
         color: #1E3A8A;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
-    
-    /* Style the tabs */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
     }
@@ -35,14 +29,10 @@ st.markdown("""
         background-color: #1E3A8A;
         color: white !important;
     }
-    
-    /* Metric Cards */
     [data-testid="stMetricValue"] {
         font-size: 2rem !important;
         color: #1E3A8A;
     }
-    
-    /* Question Card Styling */
     .question-box {
         background-color: white;
         padding: 20px;
@@ -54,23 +44,77 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- DATABASE CONFIGURATION ---
-DATA_FILE = "quiz_data.json"
+# --- SUPABASE CREDENTIALS DIRECT SETUP ---
+SUPABASE_URL = "https://jbayaagktyvesjwwbeha.supabase.co"
+SUPABASE_KEY = "sb_publishable_8PbBG3BVlMXTt5bIzY9HpQ_2h1YNAYt"
 
-def load_data():
-    if not os.path.exists(DATA_FILE):
-        return {"questions": [], "scores": {}, "settings": {}}
-    with open(DATA_FILE, "r") as f:
-        data = json.load(f)
-        if "settings" not in data:
-            data["settings"] = {}
-        return data
+@st.cache_resource
+def get_supabase_client() -> Client:
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
 
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+supabase = get_supabase_client()
 
-db = load_data()
+# --- DATABASE HELPER FUNCTIONS ---
+def get_all_questions():
+    res = supabase.table("questions").select("*").execute()
+    return res.data or []
+
+def get_questions_by_branch(branch):
+    res = supabase.table("questions").select("*").ilike("branch", branch).execute()
+    return res.data or []
+
+def add_question(q_data):
+    supabase.table("questions").insert(q_data).execute()
+
+def update_question(q_id, q_data):
+    supabase.table("questions").update(q_data).eq("id", q_id).execute()
+
+def delete_question(q_id):
+    supabase.table("questions").delete().eq("id", q_id).execute()
+
+def get_all_settings():
+    res = supabase.table("settings").select("*").execute()
+    return {row["branch"]: row["time_limit"] for row in (res.data or [])}
+
+def get_branch_time_limit(branch):
+    res = supabase.table("settings").select("time_limit").ilike("branch", branch).execute()
+    if res.data and len(res.data) > 0:
+        return res.data[0].get("time_limit", 0)
+    return 0
+
+def save_branch_time_limit(branch, time_limit):
+    supabase.table("settings").upsert({"branch": branch, "time_limit": time_limit}).execute()
+
+def get_all_scores():
+    res = supabase.table("scores").select("*").execute()
+    return res.data or []
+
+def get_student_score(roll_no):
+    res = supabase.table("scores").select("*").eq("roll_no", roll_no).execute()
+    if res.data and len(res.data) > 0:
+        return res.data[0]
+    return None
+
+def get_branch_scores(branch):
+    res = supabase.table("scores").select("*").ilike("branch", branch).order("score", desc=True).execute()
+    return res.data or []
+
+def save_student_score(score_record):
+    supabase.table("scores").upsert(score_record).execute()
+
+def delete_student_score(roll_no):
+    supabase.table("scores").delete().eq("roll_no", roll_no).execute()
+
+def delete_branch_data(branch):
+    supabase.table("questions").delete().ilike("branch", branch).execute()
+    supabase.table("scores").delete().ilike("branch", branch).execute()
+    supabase.table("settings").delete().ilike("branch", branch).execute()
+
+def wipe_all_data():
+    supabase.table("questions").delete().neq("id", -1).execute()
+    supabase.table("scores").delete().neq("roll_no", "__none__").execute()
+    supabase.table("settings").delete().neq("branch", "__none__").execute()
+
 
 # --- SESSION STATE ---
 if "logged_in" not in st.session_state:
@@ -81,12 +125,13 @@ if "logged_in" not in st.session_state:
 if "start_time" not in st.session_state:
     st.session_state.start_time = None
 
+
 # --- LOGIN SCREEN ---
 def login_screen():
     st.markdown("<h1 style='text-align: center;'>🎓 Pro Quiz Portal</h1>", unsafe_allow_html=True)
     st.write("---")
     
-    tab1, tab2 = st.tabs(["👨‍🎓 Student Entry", "👨‍🏫 Admin Login"])
+    tab1, tab2 = st.tabs(["👨🎓 Student Entry", "👨🏫 Admin Login"])
     
     with tab1:
         st.subheader("Enter your details to start")
@@ -130,6 +175,7 @@ def login_screen():
                 else:
                     st.error("Invalid credentials.")
 
+
 # --- ADMIN DASHBOARD ---
 def admin_dashboard():
     col1, col2 = st.columns([4, 1])
@@ -140,6 +186,9 @@ def admin_dashboard():
     
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["➕ Create Question", "✏️ View/Edit", "⏱️ Settings", "📊 Results", "🗑️ Manage Data"])
     
+    questions = get_all_questions()
+    existing_branches = sorted(list(set([q["branch"] for q in questions if q.get("branch")])))
+
     # 1. CREATE QUESTION
     with tab1:
         st.subheader("Add a New Question")
@@ -159,7 +208,7 @@ def admin_dashboard():
                 q_unit = ""
                 
             options_input = st.text_input("Options (Comma separated for MCQ/MSQ, leave blank for Numerical)")
-            correct_input = st.text_input("Correct Answer (For numerical, enter ONLY the number)")
+            correct_input = st.text_input("Correct Answer (For MSQ comma separated, for Numerical enter ONLY number)")
             
             submitted = st.form_submit_button("Add Question", type="primary")
             
@@ -168,15 +217,15 @@ def admin_dashboard():
                     st.error("Branch, question text, and correct answer are required.")
                 else:
                     options = [opt.strip() for opt in options_input.split(",")] if options_input else []
-                    
                     is_valid = True
+                    
                     if q_type == "MSQ": 
                         correct_ans = [ans.strip() for ans in correct_input.split(",")]
                     elif q_type == "Numerical": 
                         try:
                             correct_ans = float(correct_input)
                         except ValueError:
-                            st.error("❌ For Numerical questions, enter ONLY numbers in the answer box. Use the 'Unit' box above for 'ns'.")
+                            st.error("❌ For Numerical questions, enter ONLY numbers in the answer box.")
                             is_valid = False
                     else: 
                         correct_ans = correct_input.strip()
@@ -191,27 +240,25 @@ def admin_dashboard():
                             "correct": correct_ans,
                             "unit": q_unit.strip()
                         }
-                        db["questions"].append(new_question)
-                        save_data(db)
+                        add_question(new_question)
                         st.success(f"✅ Question added for {target_branch}!")
+                        st.rerun()
 
     # 2. VIEW/EDIT QUESTIONS
     with tab2:
         st.subheader("View & Edit Questions")
-        existing_branches = list(set([q.get("branch", "") for q in db["questions"] if q.get("branch")]))
-        
         if not existing_branches:
             st.info("No questions available yet.")
         else:
             branch_to_edit = st.selectbox("Select Branch to View/Edit", existing_branches)
-            branch_questions = [(idx, q) for idx, q in enumerate(db["questions"]) if q.get("branch") == branch_to_edit]
+            branch_questions = [q for q in questions if q.get("branch", "").lower() == branch_to_edit.lower()]
             
             if not branch_questions:
                 st.info("No questions found for this branch.")
             else:
-                for idx_in_list, (original_idx, q) in enumerate(branch_questions):
-                    with st.expander(f"Q{idx_in_list + 1}: {q['text'][:60]}..."):
-                        with st.form(key=f"edit_form_{original_idx}"):
+                for idx, q in enumerate(branch_questions):
+                    with st.expander(f"Q{idx + 1}: {q['text'][:60]}..."):
+                        with st.form(key=f"edit_form_{q['id']}"):
                             edit_q_text = st.text_area("Question Text", value=q['text'])
                             
                             col_a, col_b, col_c = st.columns(3)
@@ -222,7 +269,7 @@ def admin_dashboard():
                             with col_c:
                                 edit_unit = st.text_input("Unit", value=q.get('unit', ''))
                             
-                            edit_options = st.text_input("Options (Comma separated)", value=",".join(q.get('options', [])))
+                            edit_options = st.text_input("Options (Comma separated)", value=",".join(q.get('options') or []))
                             
                             if q['type'] == 'MSQ' and isinstance(q['correct'], list):
                                 c_val = ",".join(q['correct'])
@@ -251,56 +298,58 @@ def admin_dashboard():
                                     parsed_correct = edit_correct.strip()
                                     
                                 if is_valid:
-                                    db["questions"][original_idx]["text"] = edit_q_text
-                                    db["questions"][original_idx]["type"] = edit_q_type
-                                    db["questions"][original_idx]["marks"] = edit_marks
-                                    db["questions"][original_idx]["options"] = [opt.strip() for opt in edit_options.split(",")] if edit_options else []
-                                    db["questions"][original_idx]["correct"] = parsed_correct
-                                    db["questions"][original_idx]["unit"] = edit_unit.strip()
-                                    save_data(db)
+                                    updated_payload = {
+                                        "text": edit_q_text,
+                                        "type": edit_q_type,
+                                        "marks": edit_marks,
+                                        "options": [opt.strip() for opt in edit_options.split(",")] if edit_options else [],
+                                        "correct": parsed_correct,
+                                        "unit": edit_unit.strip()
+                                    }
+                                    update_question(q['id'], updated_payload)
                                     st.success("✅ Question updated successfully!")
                                     st.rerun()
-                                
+                                    
                             if delete_q:
-                                db["questions"].pop(original_idx)
-                                save_data(db)
+                                delete_question(q['id'])
                                 st.success("🗑️ Question deleted!")
                                 st.rerun()
 
     # 3. QUIZ SETTINGS
     with tab3:
         st.subheader("Set Time Limits")
-        existing_branches = list(set([q.get("branch", "") for q in db["questions"] if q.get("branch")]))
         if not existing_branches:
             st.info("Add questions for a branch first.")
         else:
+            settings_data = get_all_settings()
             with st.form("timer_form"):
                 branch_for_timer = st.selectbox("Select Branch", existing_branches)
-                time_limit = st.number_input("Time Limit (in minutes, 0 for no limit)", min_value=0, value=30)
+                current_limit = settings_data.get(branch_for_timer, 30)
+                time_limit = st.number_input("Time Limit (in minutes, 0 for no limit)", min_value=0, value=current_limit)
                 if st.form_submit_button("Save Time Limit", type="primary"):
-                    db["settings"][branch_for_timer] = time_limit
-                    save_data(db)
+                    save_branch_time_limit(branch_for_timer, time_limit)
                     st.success(f"✅ Time limit for {branch_for_timer} set to {time_limit} minutes.")
 
     # 4. VIEW RESULTS & MANAGE
     with tab4:
         st.subheader("Student Leaderboard")
-        if not db["scores"]:
+        scores_data = get_all_scores()
+        if not scores_data:
             st.info("No students have taken the quiz yet.")
         else:
             results_list = []
-            # Extract top-level details for dataframe
-            for uid, data in db["scores"].items():
+            for item in scores_data:
                 results_list.append({
-                    "Roll No": uid,
-                    "Name": data["Name"],
-                    "Branch": data["Branch"],
-                    "Score": data["Score"],
-                    "Correct": data.get("Correct", 0),
-                    "Wrong": data.get("Wrong", 0)
+                    "Roll No": item["roll_no"],
+                    "Name": item["name"],
+                    "Branch": item["branch"],
+                    "Score": float(item["score"]),
+                    "Correct": item.get("correct", 0),
+                    "Wrong": item.get("wrong", 0),
+                    "Status": item.get("status", "Completed")
                 })
             df = pd.DataFrame(results_list)
-            branches = df["Branch"].unique().tolist()
+            branches = sorted(df["Branch"].unique().tolist())
             selected_branch = st.selectbox("Filter by Branch", ["All"] + branches)
             
             if selected_branch != "All":
@@ -311,32 +360,26 @@ def admin_dashboard():
             
             st.subheader("Manage Individual Results")
             st.write("Select a student to delete their submission (allowing them to retake the quiz).")
-            student_options = [f"{uid} - {data['Name']} ({data['Branch']})" for uid, data in db["scores"].items()]
+            student_options = [f"{item['roll_no']} - {item['name']} ({item['branch']})" for item in scores_data]
             
             with st.form("delete_student_form"):
                 student_to_delete = st.selectbox("Select Student Record", student_options)
                 if st.form_submit_button("Delete Student Record"):
                     if student_to_delete:
                         roll_to_delete = student_to_delete.split(" - ")[0]
-                        if roll_to_delete in db["scores"]:
-                            del db["scores"][roll_to_delete]
-                            save_data(db)
-                            st.success(f"✅ Result for {roll_to_delete} deleted successfully!")
-                            st.rerun()
+                        delete_student_score(roll_to_delete)
+                        st.success(f"✅ Result for {roll_to_delete} deleted successfully!")
+                        st.rerun()
 
     # 5. MANAGE DATA
     with tab5:
         st.subheader("Danger Zone")
-        existing_branches = list(set([q.get("branch", "") for q in db["questions"] if q.get("branch")]))
         if existing_branches:
             branch_to_delete = st.selectbox("Select Branch Quiz to Delete", existing_branches)
             confirm_branch = st.checkbox(f"Confirm deletion for {branch_to_delete}")
             if st.button("🗑️ Delete Branch Quiz"):
                 if confirm_branch:
-                    db["questions"] = [q for q in db["questions"] if q.get("branch") != branch_to_delete]
-                    db["scores"] = {k: v for k, v in db["scores"].items() if v["Branch"] != branch_to_delete}
-                    if branch_to_delete in db["settings"]: del db["settings"][branch_to_delete]
-                    save_data(db)
+                    delete_branch_data(branch_to_delete)
                     st.success(f"✅ Deleted all data for {branch_to_delete}.")
                     st.rerun()
                 else:
@@ -346,81 +389,78 @@ def admin_dashboard():
         confirm_all = st.checkbox("Confirm Complete Wipe")
         if st.button("🚨 Delete Everything (All Branches)"):
             if confirm_all:
-                db["questions"] = []
-                db["scores"] = {}
-                db["settings"] = {}
-                save_data(db)
+                wipe_all_data()
                 st.success("✅ All data cleared.")
                 st.rerun()
             else:
                 st.error("Check the confirmation box first.")
 
+
 # --- CANDIDATE DASHBOARD ---
 def candidate_dashboard():
     student_branch = st.session_state.student_info['Branch']
+    roll_no = st.session_state.user_id
     
     col1, col2 = st.columns([4, 1])
     with col1:
         st.title(f"Quiz: {student_branch}")
-        st.caption(f"👤 **{st.session_state.student_info['Name']}** | 🆔 **{st.session_state.user_id}**")
+        st.caption(f"👤 **{st.session_state.student_info['Name']}** | 🆔 **{roll_no}**")
     with col2:
         st.button("🚪 Logout", on_click=logout, use_container_width=True)
     
-    # FETCH QUESTIONS
-    my_questions = [q for q in db["questions"] if q.get("branch", "").lower() == student_branch.lower()]
+    my_questions = get_questions_by_branch(student_branch)
+    student_record = get_student_score(roll_no)
     
     # -------------------------------------------------------------
     # IF QUIZ ALREADY SUBMITTED: SHOW RESULT SCREEN & LEADERBOARD
     # -------------------------------------------------------------
-    if st.session_state.user_id in db["scores"]:
-        student_data = db["scores"][st.session_state.user_id]
-        
+    if student_record is not None:
         st.success("🎉 You have successfully completed the quiz!")
         
-        # 1. Performance Summary Metrics
         st.markdown("### 📊 Your Performance Summary")
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Final Score", f"{student_data['Score']}")
-        m2.metric("Correct Answers", f"{student_data.get('Correct', 0)}")
-        m3.metric("Wrong Answers", f"{student_data.get('Wrong', 0)}")
-        m4.metric("Marks Deducted", f"-{student_data.get('Deducted', 0.0)}")
+        m1.metric("Final Score", f"{student_record['score']}")
+        m2.metric("Correct Answers", f"{student_record.get('correct', 0)}")
+        m3.metric("Wrong Answers", f"{student_record.get('wrong', 0)}")
+        m4.metric("Marks Deducted", f"-{student_record.get('deducted', 0.0)}")
         
         st.divider()
         
-        # 2. Detailed Review
         st.markdown("### 📝 Review Your Answers")
-        saved_responses = student_data.get("Responses", {})
+        saved_responses = student_record.get("responses") or {}
         
         for i, q in enumerate(my_questions):
             with st.container():
-                st.markdown(f"<div class='question-box'>", unsafe_allow_html=True)
+                st.markdown("<div class='question-box'>", unsafe_allow_html=True)
                 st.markdown(f"**Q{i+1}: {q['text']}** _({q['marks']} Marks)_")
                 
-                # Fetch what the user answered
                 ans = saved_responses.get(str(i), None)
                 
-                # Format answers for readability
                 display_ans = ans
                 display_correct = q['correct']
                 if q["type"] == "MSQ":
                     display_ans = ", ".join(ans) if ans else "None"
-                    display_correct = ", ".join(q['correct'])
+                    display_correct = ", ".join(q['correct']) if isinstance(q['correct'], list) else str(q['correct'])
                 elif q["type"] == "Numerical":
-                    if ans == "": display_ans = "None"
-                    if q.get("unit"): 
-                        if ans != "": display_ans = f"{ans} {q['unit']}"
-                        display_correct = f"{q['correct']} {q['unit']}"
+                    if ans == "" or ans is None: 
+                        display_ans = "None"
+                    elif q.get("unit"): 
+                        display_ans = f"{ans} {q['unit']}"
+                    display_correct = f"{q['correct']} {q.get('unit', '')}".strip()
                 
-                # Evaluate correctly for the UI box
                 if ans is None or ans == [] or ans == "":
                     st.warning(f"⚪ **Skipped** | Correct Answer: **{display_correct}**")
                 else:
                     is_correct = False
-                    if q["type"] == "MCQ": is_correct = (ans == q["correct"])
-                    elif q["type"] == "MSQ": is_correct = set(ans) == set(q["correct"])
+                    if q["type"] == "MCQ": 
+                        is_correct = (ans == q["correct"])
+                    elif q["type"] == "MSQ": 
+                        is_correct = set(ans) == set(q["correct"])
                     elif q["type"] == "Numerical":
-                        try: is_correct = (float(ans) == float(q["correct"]))
-                        except ValueError: is_correct = False
+                        try: 
+                            is_correct = (float(ans) == float(q["correct"]))
+                        except ValueError: 
+                            is_correct = False
 
                     if is_correct:
                         st.success(f"✅ **Correct!** Your Answer: {display_ans}")
@@ -431,15 +471,10 @@ def candidate_dashboard():
 
         st.divider()
 
-        # 3. Branch Leaderboard
         st.markdown("### 🏆 Branch Leaderboard")
-        branch_scores = []
-        for uid, data in db["scores"].items():
-            if data.get("Branch", "").lower() == student_branch.lower():
-                branch_scores.append({"Name": data["Name"], "Score": data["Score"]})
+        branch_scores = get_branch_scores(student_branch)
         if branch_scores:
-            df_leaderboard = pd.DataFrame(branch_scores)
-            df_leaderboard = df_leaderboard.sort_values(by="Score", ascending=False).reset_index(drop=True)
+            df_leaderboard = pd.DataFrame([{"Name": d["name"], "Score": float(d["score"])} for d in branch_scores])
             df_leaderboard.index = df_leaderboard.index + 1
             st.dataframe(df_leaderboard, use_container_width=True)
         return
@@ -453,7 +488,7 @@ def candidate_dashboard():
 
     st.divider()
 
-    time_limit = db.get("settings", {}).get(student_branch, 0)
+    time_limit = get_branch_time_limit(student_branch)
     time_expired = False
     
     if time_limit > 0:
@@ -471,9 +506,8 @@ def candidate_dashboard():
     with st.form("quiz_form"):
         user_answers = {}
         for i, q in enumerate(my_questions):
-            st.markdown(f"<div class='question-box'>", unsafe_allow_html=True)
+            st.markdown("<div class='question-box'>", unsafe_allow_html=True)
             
-            # Display Negative Marking hints correctly
             if q["type"] == "MCQ":
                 neg_mark_text = f"-{q['marks'] * 0.25} for wrong"
             else:
@@ -482,9 +516,9 @@ def candidate_dashboard():
             st.markdown(f"**Q{i+1}. {q['text']}** _({q['marks']} Marks | {neg_mark_text})_")
             
             if q["type"] == "MCQ":
-                user_answers[i] = st.radio("Options", q["options"], index=None, key=f"q_{i}", label_visibility="collapsed", disabled=time_expired)
+                user_answers[i] = st.radio("Options", q.get("options") or [], index=None, key=f"q_{i}", label_visibility="collapsed", disabled=time_expired)
             elif q["type"] == "MSQ":
-                user_answers[i] = st.multiselect("Options", q["options"], key=f"q_{i}", label_visibility="collapsed", disabled=time_expired)
+                user_answers[i] = st.multiselect("Options", q.get("options") or [], key=f"q_{i}", label_visibility="collapsed", disabled=time_expired)
             elif q["type"] == "Numerical":
                 col_input, col_unit = st.columns([2, 5])
                 with col_input:
@@ -502,20 +536,22 @@ def candidate_dashboard():
                 final_elapsed = time.time() - st.session_state.start_time
                 if final_elapsed > (time_limit * 60) + 10: 
                     st.error("Submission rejected. You exceeded the time limit.")
-                    db["scores"][st.session_state.user_id] = {
-                        "Name": st.session_state.student_info["Name"],
-                        "Roll No": st.session_state.student_info["Roll No"],
-                        "Section": st.session_state.student_info["Section"],
-                        "Branch": student_branch,
-                        "Score": 0,
-                        "Status": "Rejected (Late)",
-                        "Responses": {}
+                    late_record = {
+                        "roll_no": roll_no,
+                        "name": st.session_state.student_info["Name"],
+                        "section": st.session_state.student_info["Section"],
+                        "branch": student_branch,
+                        "score": 0.0,
+                        "correct": 0,
+                        "wrong": 0,
+                        "deducted": 0.0,
+                        "responses": {},
+                        "status": "Rejected (Late)"
                     }
-                    save_data(db)
+                    save_student_score(late_record)
                     st.rerun()
                     return
 
-            # SCORING ENGINE
             score = 0.0
             correct_count = 0
             wrong_count = 0
@@ -525,43 +561,45 @@ def candidate_dashboard():
             for i, q in enumerate(my_questions):
                 ans = user_answers[i]
                 marks = q["marks"]
-                saved_responses[str(i)] = ans # Save what the user typed/clicked
+                saved_responses[str(i)] = ans
                 
                 if ans is None or ans == [] or ans == "": 
-                    continue # Skipped question
+                    continue
                     
                 is_correct = False
-                if q["type"] == "MCQ": is_correct = (ans == q["correct"])
-                elif q["type"] == "MSQ": is_correct = set(ans) == set(q["correct"])
+                if q["type"] == "MCQ": 
+                    is_correct = (ans == q["correct"])
+                elif q["type"] == "MSQ": 
+                    is_correct = set(ans) == set(q["correct"])
                 elif q["type"] == "Numerical":
-                    try: is_correct = (float(ans) == float(q["correct"]))
-                    except ValueError: is_correct = False
+                    try: 
+                        is_correct = (float(ans) == float(q["correct"]))
+                    except ValueError: 
+                        is_correct = False
 
                 if is_correct: 
                     score += marks
                     correct_count += 1
                 else: 
                     wrong_count += 1
-                    # NEGATIVE MARKING ONLY FOR MCQ NOW
                     if q["type"] == "MCQ":
                         penalty = (marks * 0.25)
                         score -= penalty
                         total_deducted += penalty
 
-            # Save detailed metrics to DB
-            db["scores"][st.session_state.user_id] = {
-                "Name": st.session_state.student_info["Name"],
-                "Roll No": st.session_state.student_info["Roll No"],
-                "Section": st.session_state.student_info["Section"],
-                "Branch": student_branch,
-                "Score": score,
-                "Correct": correct_count,
-                "Wrong": wrong_count,
-                "Deducted": total_deducted,
-                "Responses": saved_responses,
-                "Status": "Completed"
+            final_record = {
+                "roll_no": roll_no,
+                "name": st.session_state.student_info["Name"],
+                "section": st.session_state.student_info["Section"],
+                "branch": student_branch,
+                "score": score,
+                "correct": correct_count,
+                "wrong": wrong_count,
+                "deducted": total_deducted,
+                "responses": saved_responses,
+                "status": "Completed"
             }
-            save_data(db)
+            save_student_score(final_record)
             st.rerun()
 
 def logout():
@@ -574,5 +612,7 @@ def logout():
 if not st.session_state.logged_in:
     login_screen()
 else:
-    if st.session_state.role == "admin": admin_dashboard()
-    else: candidate_dashboard()
+    if st.session_state.role == "admin": 
+        admin_dashboard()
+    else: 
+        candidate_dashboard()
