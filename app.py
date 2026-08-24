@@ -6,7 +6,6 @@ from supabase import create_client, Client
 # --- PAGE CONFIGURATION & STYLING ---
 st.set_page_config(page_title="Pro Quiz Portal", page_icon="🎓", layout="centered")
 
-# Custom CSS styling
 st.markdown("""
 <style>
     .stApp {
@@ -44,7 +43,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- SUPABASE CREDENTIALS DIRECT SETUP ---
+# --- SUPABASE CREDENTIALS ---
 SUPABASE_URL = "https://jbayaagktyvesjwwbeha.supabase.co"
 SUPABASE_KEY = "sb_publishable_8PbBG3BVlMXTt5bIzY9HpQ_2h1YNAYt"
 
@@ -56,12 +55,20 @@ supabase = get_supabase_client()
 
 # --- DATABASE HELPER FUNCTIONS ---
 def get_all_questions():
-    res = supabase.table("questions").select("*").execute()
-    return res.data or []
+    try:
+        res = supabase.table("questions").select("*").execute()
+        return res.data or []
+    except Exception as e:
+        st.error(f"Error fetching questions: {e}")
+        return []
 
 def get_questions_by_branch(branch):
-    res = supabase.table("questions").select("*").ilike("branch", branch).execute()
-    return res.data or []
+    try:
+        res = supabase.table("questions").select("*").ilike("branch", branch).execute()
+        return res.data or []
+    except Exception as e:
+        st.error(f"Error fetching questions: {e}")
+        return []
 
 def add_question(q_data):
     supabase.table("questions").insert(q_data).execute()
@@ -73,31 +80,47 @@ def delete_question(q_id):
     supabase.table("questions").delete().eq("id", q_id).execute()
 
 def get_all_settings():
-    res = supabase.table("settings").select("*").execute()
-    return {row["branch"]: row["time_limit"] for row in (res.data or [])}
+    try:
+        res = supabase.table("settings").select("*").execute()
+        return {row["branch"]: row["time_limit"] for row in (res.data or [])}
+    except Exception:
+        return {}
 
 def get_branch_time_limit(branch):
-    res = supabase.table("settings").select("time_limit").ilike("branch", branch).execute()
-    if res.data and len(res.data) > 0:
-        return res.data[0].get("time_limit", 0)
+    try:
+        res = supabase.table("settings").select("time_limit").ilike("branch", branch).execute()
+        if res.data and len(res.data) > 0:
+            return res.data[0].get("time_limit", 0)
+    except Exception:
+        pass
     return 0
 
 def save_branch_time_limit(branch, time_limit):
     supabase.table("settings").upsert({"branch": branch, "time_limit": time_limit}).execute()
 
 def get_all_scores():
-    res = supabase.table("scores").select("*").execute()
-    return res.data or []
+    try:
+        res = supabase.table("scores").select("*").execute()
+        return res.data or []
+    except Exception as e:
+        st.error(f"Error fetching scores: {e}")
+        return []
 
 def get_student_score(roll_no):
-    res = supabase.table("scores").select("*").eq("roll_no", roll_no).execute()
-    if res.data and len(res.data) > 0:
-        return res.data[0]
+    try:
+        res = supabase.table("scores").select("*").eq("roll_no", roll_no).execute()
+        if res.data and len(res.data) > 0:
+            return res.data[0]
+    except Exception:
+        pass
     return None
 
 def get_branch_scores(branch):
-    res = supabase.table("scores").select("*").ilike("branch", branch).order("score", desc=True).execute()
-    return res.data or []
+    try:
+        res = supabase.table("scores").select("*").ilike("branch", branch).order("score", desc=True).execute()
+        return res.data or []
+    except Exception:
+        return []
 
 def save_student_score(score_record):
     supabase.table("scores").upsert(score_record).execute()
@@ -190,81 +213,143 @@ def admin_dashboard():
     existing_branches = sorted(list(set([q["branch"] for q in questions if q.get("branch")])))
 
     # 1. CREATE QUESTION
- if submitted:
-    if not q_text or not correct_input or not target_branch:
-        st.error("Branch, question text, and correct answer are required.")
-    else:
-        options = [opt.strip() for opt in options_input.split(",")] if options_input else []
-        is_valid = True
-        
-        if q_type == "MSQ": 
-            correct_ans = [ans.strip() for ans in correct_input.split(",")]
-        elif q_type == "Numerical": 
-            try:
-                correct_ans = float(correct_input)
-            except ValueError:
-                st.error("❌ For Numerical questions, enter ONLY numbers in the answer box.")
-                is_valid = False
-        else: 
-            correct_ans = correct_input.strip()
+    with tab1:
+        st.subheader("Add a New Question")
+        with st.form("add_question_form"):
+            target_branch = st.text_input("Target Course & Semester (e.g., BCA 2nd Sem)")
+            q_text = st.text_area("Question Text")
+            
+            col_a, col_b = st.columns(2)
+            with col_a:
+                q_type = st.selectbox("Question Type", ["MCQ", "MSQ", "Numerical"])
+            with col_b:
+                marks = st.selectbox("Marks", [1, 2], help="MCQ has 25% negative marking. MSQ and Numerical have NO negative marking.")
+            
+            if q_type == "Numerical":
+                q_unit = st.text_input("Unit (Optional - e.g., ns, kg, m/s)")
+            else:
+                q_unit = ""
+                
+            options_input = st.text_input("Options (Comma separated for MCQ/MSQ, leave blank for Numerical)")
+            correct_input = st.text_input("Correct Answer (For MSQ comma separated, for Numerical enter ONLY number)")
+            
+            submitted = st.form_submit_button("Add Question", type="primary")
+            
+            if submitted:
+                if not q_text or not correct_input or not target_branch:
+                    st.error("Branch, question text, and correct answer are required.")
+                else:
+                    options = [opt.strip() for opt in options_input.split(",")] if options_input else []
+                    is_valid = True
+                    
+                    if q_type == "MSQ": 
+                        correct_ans = [ans.strip() for ans in correct_input.split(",")]
+                    elif q_type == "Numerical": 
+                        try:
+                            correct_ans = float(correct_input)
+                        except ValueError:
+                            st.error("❌ For Numerical questions, enter ONLY numbers in the answer box.")
+                            is_valid = False
+                    else: 
+                        correct_ans = correct_input.strip()
 
-        if is_valid:
-            new_question = {
-                "branch": target_branch.strip(),
-                "text": q_text,
-                "type": q_type,
-                "marks": marks,
-                "options": options,
-                "correct": correct_ans,
-                "unit": q_unit.strip()
-            }
-            try:
-                add_question(new_question)
-                st.toast(f"✅ Question added for {target_branch}!", icon="🎉")
-                time.sleep(0.5)
-                st.rerun()
-            except Exception as e:
-                st.error(f"Database error: {e}")
+                    if is_valid:
+                        new_question = {
+                            "branch": target_branch.strip(),
+                            "text": q_text,
+                            "type": q_type,
+                            "marks": marks,
+                            "options": options,
+                            "correct": correct_ans,
+                            "unit": q_unit.strip()
+                        }
+                        try:
+                            add_question(new_question)
+                            st.toast(f"✅ Question added for {target_branch}!", icon="🎉")
+                            time.sleep(0.6)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to add question: {e}")
 
     # 2. VIEW/EDIT QUESTIONS
-  if save_edit:
-    is_valid = True
-    if edit_q_type == "MSQ": 
-        parsed_correct = [ans.strip() for ans in edit_correct.split(",")]
-    elif edit_q_type == "Numerical": 
-        try:
-            parsed_correct = float(edit_correct)
-        except ValueError:
-            st.error("❌ For Numerical questions, enter ONLY numbers.")
-            is_valid = False
-    else: 
-        parsed_correct = edit_correct.strip()
-        
-    if is_valid:
-        updated_payload = {
-            "text": edit_q_text,
-            "type": edit_q_type,
-            "marks": edit_marks,
-            "options": [opt.strip() for opt in edit_options.split(",")] if edit_options else [],
-            "correct": parsed_correct,
-            "unit": edit_unit.strip()
-        }
-        try:
-            update_question(q['id'], updated_payload)
-            st.toast("✅ Question updated successfully!", icon="💾")
-            time.sleep(0.5)
-            st.rerun()
-        except Exception as e:
-            st.error(f"Database error: {e}")
-        
-if delete_q:
-    try:
-        delete_question(q['id'])
-        st.toast("🗑️ Question deleted!", icon="🗑️")
-        time.sleep(0.5)
-        st.rerun()
-    except Exception as e:
-        st.error(f"Database error: {e}")
+    with tab2:
+        st.subheader("View & Edit Questions")
+        if not existing_branches:
+            st.info("No questions available yet.")
+        else:
+            branch_to_edit = st.selectbox("Select Branch to View/Edit", existing_branches)
+            branch_questions = [q for q in questions if q.get("branch", "").lower() == branch_to_edit.lower()]
+            
+            if not branch_questions:
+                st.info("No questions found for this branch.")
+            else:
+                for idx, q in enumerate(branch_questions):
+                    with st.expander(f"Q{idx + 1}: {q['text'][:60]}..."):
+                        with st.form(key=f"edit_form_{q['id']}"):
+                            edit_q_text = st.text_area("Question Text", value=q['text'])
+                            
+                            col_a, col_b, col_c = st.columns(3)
+                            with col_a:
+                                edit_q_type = st.selectbox("Question Type", ["MCQ", "MSQ", "Numerical"], index=["MCQ", "MSQ", "Numerical"].index(q['type']))
+                            with col_b:
+                                edit_marks = st.selectbox("Marks", [1, 2], index=[1, 2].index(q['marks']))
+                            with col_c:
+                                edit_unit = st.text_input("Unit", value=q.get('unit', ''))
+                            
+                            edit_options = st.text_input("Options (Comma separated)", value=",".join(q.get('options') or []))
+                            
+                            if q['type'] == 'MSQ' and isinstance(q['correct'], list):
+                                c_val = ",".join(q['correct'])
+                            else:
+                                c_val = str(q['correct'])
+                                
+                            edit_correct = st.text_input("Correct Answer", value=c_val)
+                            
+                            c1, c2 = st.columns(2)
+                            with c1:
+                                save_edit = st.form_submit_button("Save Changes", type="primary")
+                            with c2:
+                                delete_q = st.form_submit_button("Delete Question")
+                                
+                            if save_edit:
+                                is_valid = True
+                                if edit_q_type == "MSQ": 
+                                    parsed_correct = [ans.strip() for ans in edit_correct.split(",")]
+                                elif edit_q_type == "Numerical": 
+                                    try:
+                                        parsed_correct = float(edit_correct)
+                                    except ValueError:
+                                        st.error("❌ For Numerical questions, enter ONLY numbers.")
+                                        is_valid = False
+                                else: 
+                                    parsed_correct = edit_correct.strip()
+                                    
+                                if is_valid:
+                                    updated_payload = {
+                                        "text": edit_q_text,
+                                        "type": edit_q_type,
+                                        "marks": edit_marks,
+                                        "options": [opt.strip() for opt in edit_options.split(",")] if edit_options else [],
+                                        "correct": parsed_correct,
+                                        "unit": edit_unit.strip()
+                                    }
+                                    try:
+                                        update_question(q['id'], updated_payload)
+                                        st.toast("✅ Question updated successfully!", icon="💾")
+                                        time.sleep(0.6)
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Failed to update question: {e}")
+                                    
+                            if delete_q:
+                                try:
+                                    delete_question(q['id'])
+                                    st.toast("🗑️ Question deleted!", icon="🗑️")
+                                    time.sleep(0.6)
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Failed to delete question: {e}")
+
     # 3. QUIZ SETTINGS
     with tab3:
         st.subheader("Set Time Limits")
@@ -277,8 +362,13 @@ if delete_q:
                 current_limit = settings_data.get(branch_for_timer, 30)
                 time_limit = st.number_input("Time Limit (in minutes, 0 for no limit)", min_value=0, value=current_limit)
                 if st.form_submit_button("Save Time Limit", type="primary"):
-                    save_branch_time_limit(branch_for_timer, time_limit)
-                    st.success(f"✅ Time limit for {branch_for_timer} set to {time_limit} minutes.")
+                    try:
+                        save_branch_time_limit(branch_for_timer, time_limit)
+                        st.toast(f"✅ Time limit for {branch_for_timer} saved ({time_limit} mins)!", icon="⏱️")
+                        time.sleep(0.6)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Failed to save settings: {e}")
 
     # 4. VIEW RESULTS & MANAGE
     with tab4:
@@ -317,9 +407,13 @@ if delete_q:
                 if st.form_submit_button("Delete Student Record"):
                     if student_to_delete:
                         roll_to_delete = student_to_delete.split(" - ")[0]
-                        delete_student_score(roll_to_delete)
-                        st.success(f"✅ Result for {roll_to_delete} deleted successfully!")
-                        st.rerun()
+                        try:
+                            delete_student_score(roll_to_delete)
+                            st.toast(f"✅ Result for {roll_to_delete} deleted!", icon="🗑️")
+                            time.sleep(0.6)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to delete record: {e}")
 
     # 5. MANAGE DATA
     with tab5:
@@ -329,9 +423,13 @@ if delete_q:
             confirm_branch = st.checkbox(f"Confirm deletion for {branch_to_delete}")
             if st.button("🗑️ Delete Branch Quiz"):
                 if confirm_branch:
-                    delete_branch_data(branch_to_delete)
-                    st.success(f"✅ Deleted all data for {branch_to_delete}.")
-                    st.rerun()
+                    try:
+                        delete_branch_data(branch_to_delete)
+                        st.toast(f"✅ Deleted all data for {branch_to_delete}.", icon="🗑️")
+                        time.sleep(0.6)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Failed to delete branch data: {e}")
                 else:
                     st.error("Check the confirmation box first.")
         
@@ -339,9 +437,13 @@ if delete_q:
         confirm_all = st.checkbox("Confirm Complete Wipe")
         if st.button("🚨 Delete Everything (All Branches)"):
             if confirm_all:
-                wipe_all_data()
-                st.success("✅ All data cleared.")
-                st.rerun()
+                try:
+                    wipe_all_data()
+                    st.toast("✅ All data cleared.", icon="🚨")
+                    time.sleep(0.6)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to clear data: {e}")
             else:
                 st.error("Check the confirmation box first.")
 
@@ -498,7 +600,10 @@ def candidate_dashboard():
                         "responses": {},
                         "status": "Rejected (Late)"
                     }
-                    save_student_score(late_record)
+                    try:
+                        save_student_score(late_record)
+                    except Exception as e:
+                        st.error(f"Failed to record submission: {e}")
                     st.rerun()
                     return
 
@@ -549,8 +654,13 @@ def candidate_dashboard():
                 "responses": saved_responses,
                 "status": "Completed"
             }
-            save_student_score(final_record)
-            st.rerun()
+            try:
+                save_student_score(final_record)
+                st.toast("✅ Quiz submitted successfully!", icon="🎉")
+                time.sleep(0.6)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to save quiz results: {e}")
 
 def logout():
     st.session_state.logged_in = False
