@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import time
+import streamlit.components.v1 as components
 from supabase import create_client, Client
 
 # --- PAGE CONFIGURATION & STYLING ---
@@ -450,18 +451,60 @@ def admin_dashboard():
 
 # --- CANDIDATE DASHBOARD ---
 def candidate_dashboard():
-    student_branch = st.session_state.student_info['Branch']
-    roll_no = st.session_state.user_id
+    time_limit = get_branch_time_limit(student_branch)
+    time_expired = False
     
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        st.title(f"Quiz: {student_branch}")
-        st.caption(f"👤 **{st.session_state.student_info['Name']}** | 🆔 **{roll_no}**")
-    with col2:
-        st.button("🚪 Logout", on_click=logout, use_container_width=True)
-    
-    my_questions = get_questions_by_branch(student_branch)
-    student_record = get_student_score(roll_no)
+    if time_limit > 0:
+        elapsed_seconds = int(time.time() - st.session_state.start_time)
+        remaining_seconds = max(0, int((time_limit * 60) - elapsed_seconds))
+        
+        if remaining_seconds <= 0:
+            st.error("⏱️ Your time is up! The quiz is locked.")
+            time_expired = True
+        else:
+            # Live Real-Time Browser Countdown Timer
+            timer_html = f"""
+            <div style="
+                background-color: #EEF2FF;
+                border: 2px solid #4F46E5;
+                border-radius: 8px;
+                padding: 10px;
+                text-align: center;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                font-size: 1.15rem;
+                color: #1E1B4B;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            ">
+                ⏱️ <b>Time Remaining:</b> 
+                <span id="quiz-countdown" style="font-weight: 700; color: #DC2626; font-size: 1.3rem;">--:--</span>
+            </div>
+
+            <script>
+                let remaining = {remaining_seconds};
+                const display = document.getElementById('quiz-countdown');
+
+                function formatTime(secs) {{
+                    const m = Math.floor(secs / 60);
+                    const s = secs % 60;
+                    return (m < 10 ? '0' : '') + m + 'm ' + (s < 10 ? '0' : '') + s + 's';
+                }}
+
+                function tick() {{
+                    if (remaining <= 0) {{
+                        display.innerText = "00m 00s (Time Expired)";
+                        display.style.color = "#991B1B";
+                        clearInterval(timerInterval);
+                        return;
+                    }}
+                    display.innerText = formatTime(remaining);
+                    remaining--;
+                }}
+
+                tick();
+                const timerInterval = setInterval(tick, 1000);
+            </script>
+            """
+            components.html(timer_html, height=75)
     
     # -------------------------------------------------------------
     # IF QUIZ ALREADY SUBMITTED: SHOW RESULT SCREEN & LEADERBOARD
