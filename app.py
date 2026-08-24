@@ -190,131 +190,81 @@ def admin_dashboard():
     existing_branches = sorted(list(set([q["branch"] for q in questions if q.get("branch")])))
 
     # 1. CREATE QUESTION
-    with tab1:
-        st.subheader("Add a New Question")
-        with st.form("add_question_form"):
-            target_branch = st.text_input("Target Course & Semester (e.g., BCA 2nd Sem)")
-            q_text = st.text_area("Question Text")
-            
-            col_a, col_b = st.columns(2)
-            with col_a:
-                q_type = st.selectbox("Question Type", ["MCQ", "MSQ", "Numerical"])
-            with col_b:
-                marks = st.selectbox("Marks", [1, 2], help="MCQ has 25% negative marking. MSQ and Numerical have NO negative marking.")
-            
-            if q_type == "Numerical":
-                q_unit = st.text_input("Unit (Optional - e.g., ns, kg, m/s)")
-            else:
-                q_unit = ""
-                
-            options_input = st.text_input("Options (Comma separated for MCQ/MSQ, leave blank for Numerical)")
-            correct_input = st.text_input("Correct Answer (For MSQ comma separated, for Numerical enter ONLY number)")
-            
-            submitted = st.form_submit_button("Add Question", type="primary")
-            
-            if submitted:
-                if not q_text or not correct_input or not target_branch:
-                    st.error("Branch, question text, and correct answer are required.")
-                else:
-                    options = [opt.strip() for opt in options_input.split(",")] if options_input else []
-                    is_valid = True
-                    
-                    if q_type == "MSQ": 
-                        correct_ans = [ans.strip() for ans in correct_input.split(",")]
-                    elif q_type == "Numerical": 
-                        try:
-                            correct_ans = float(correct_input)
-                        except ValueError:
-                            st.error("❌ For Numerical questions, enter ONLY numbers in the answer box.")
-                            is_valid = False
-                    else: 
-                        correct_ans = correct_input.strip()
+ if submitted:
+    if not q_text or not correct_input or not target_branch:
+        st.error("Branch, question text, and correct answer are required.")
+    else:
+        options = [opt.strip() for opt in options_input.split(",")] if options_input else []
+        is_valid = True
+        
+        if q_type == "MSQ": 
+            correct_ans = [ans.strip() for ans in correct_input.split(",")]
+        elif q_type == "Numerical": 
+            try:
+                correct_ans = float(correct_input)
+            except ValueError:
+                st.error("❌ For Numerical questions, enter ONLY numbers in the answer box.")
+                is_valid = False
+        else: 
+            correct_ans = correct_input.strip()
 
-                    if is_valid:
-                        new_question = {
-                            "branch": target_branch.strip(),
-                            "text": q_text,
-                            "type": q_type,
-                            "marks": marks,
-                            "options": options,
-                            "correct": correct_ans,
-                            "unit": q_unit.strip()
-                        }
-                        add_question(new_question)
-                        st.success(f"✅ Question added for {target_branch}!")
-                        st.rerun()
+        if is_valid:
+            new_question = {
+                "branch": target_branch.strip(),
+                "text": q_text,
+                "type": q_type,
+                "marks": marks,
+                "options": options,
+                "correct": correct_ans,
+                "unit": q_unit.strip()
+            }
+            try:
+                add_question(new_question)
+                st.toast(f"✅ Question added for {target_branch}!", icon="🎉")
+                time.sleep(0.5)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Database error: {e}")
 
     # 2. VIEW/EDIT QUESTIONS
-    with tab2:
-        st.subheader("View & Edit Questions")
-        if not existing_branches:
-            st.info("No questions available yet.")
-        else:
-            branch_to_edit = st.selectbox("Select Branch to View/Edit", existing_branches)
-            branch_questions = [q for q in questions if q.get("branch", "").lower() == branch_to_edit.lower()]
-            
-            if not branch_questions:
-                st.info("No questions found for this branch.")
-            else:
-                for idx, q in enumerate(branch_questions):
-                    with st.expander(f"Q{idx + 1}: {q['text'][:60]}..."):
-                        with st.form(key=f"edit_form_{q['id']}"):
-                            edit_q_text = st.text_area("Question Text", value=q['text'])
-                            
-                            col_a, col_b, col_c = st.columns(3)
-                            with col_a:
-                                edit_q_type = st.selectbox("Question Type", ["MCQ", "MSQ", "Numerical"], index=["MCQ", "MSQ", "Numerical"].index(q['type']))
-                            with col_b:
-                                edit_marks = st.selectbox("Marks", [1, 2], index=[1, 2].index(q['marks']))
-                            with col_c:
-                                edit_unit = st.text_input("Unit", value=q.get('unit', ''))
-                            
-                            edit_options = st.text_input("Options (Comma separated)", value=",".join(q.get('options') or []))
-                            
-                            if q['type'] == 'MSQ' and isinstance(q['correct'], list):
-                                c_val = ",".join(q['correct'])
-                            else:
-                                c_val = str(q['correct'])
-                                
-                            edit_correct = st.text_input("Correct Answer", value=c_val)
-                            
-                            c1, c2 = st.columns(2)
-                            with c1:
-                                save_edit = st.form_submit_button("Save Changes", type="primary")
-                            with c2:
-                                delete_q = st.form_submit_button("Delete Question")
-                                
-                            if save_edit:
-                                is_valid = True
-                                if edit_q_type == "MSQ": 
-                                    parsed_correct = [ans.strip() for ans in edit_correct.split(",")]
-                                elif edit_q_type == "Numerical": 
-                                    try:
-                                        parsed_correct = float(edit_correct)
-                                    except ValueError:
-                                        st.error("❌ For Numerical questions, enter ONLY numbers.")
-                                        is_valid = False
-                                else: 
-                                    parsed_correct = edit_correct.strip()
-                                    
-                                if is_valid:
-                                    updated_payload = {
-                                        "text": edit_q_text,
-                                        "type": edit_q_type,
-                                        "marks": edit_marks,
-                                        "options": [opt.strip() for opt in edit_options.split(",")] if edit_options else [],
-                                        "correct": parsed_correct,
-                                        "unit": edit_unit.strip()
-                                    }
-                                    update_question(q['id'], updated_payload)
-                                    st.success("✅ Question updated successfully!")
-                                    st.rerun()
-                                    
-                            if delete_q:
-                                delete_question(q['id'])
-                                st.success("🗑️ Question deleted!")
-                                st.rerun()
-
+  if save_edit:
+    is_valid = True
+    if edit_q_type == "MSQ": 
+        parsed_correct = [ans.strip() for ans in edit_correct.split(",")]
+    elif edit_q_type == "Numerical": 
+        try:
+            parsed_correct = float(edit_correct)
+        except ValueError:
+            st.error("❌ For Numerical questions, enter ONLY numbers.")
+            is_valid = False
+    else: 
+        parsed_correct = edit_correct.strip()
+        
+    if is_valid:
+        updated_payload = {
+            "text": edit_q_text,
+            "type": edit_q_type,
+            "marks": edit_marks,
+            "options": [opt.strip() for opt in edit_options.split(",")] if edit_options else [],
+            "correct": parsed_correct,
+            "unit": edit_unit.strip()
+        }
+        try:
+            update_question(q['id'], updated_payload)
+            st.toast("✅ Question updated successfully!", icon="💾")
+            time.sleep(0.5)
+            st.rerun()
+        except Exception as e:
+            st.error(f"Database error: {e}")
+        
+if delete_q:
+    try:
+        delete_question(q['id'])
+        st.toast("🗑️ Question deleted!", icon="🗑️")
+        time.sleep(0.5)
+        st.rerun()
+    except Exception as e:
+        st.error(f"Database error: {e}")
     # 3. QUIZ SETTINGS
     with tab3:
         st.subheader("Set Time Limits")
