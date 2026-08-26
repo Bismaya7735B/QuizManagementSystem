@@ -65,7 +65,7 @@ def get_all_questions():
 
 def get_questions_by_branch(branch):
     try:
-        res = supabase.table("questions").select("*").ilike("branch", branch).execute()
+        res = supabase.table("questions").select("*").ilike("branch", branch.strip()).execute()
         return res.data or []
     except Exception as e:
         st.error(f"Error fetching branch questions: {e}")
@@ -83,21 +83,29 @@ def delete_question(q_id):
 def get_all_settings():
     try:
         res = supabase.table("settings").select("*").execute()
-        return {row["branch"]: row["time_limit"] for row in (res.data or [])}
+        return res.data or []
     except Exception:
-        return {}
+        return []
 
-def get_branch_time_limit(branch):
+def get_branch_settings(branch):
     try:
-        res = supabase.table("settings").select("time_limit").ilike("branch", branch).execute()
+        res = supabase.table("settings").select("*").ilike("branch", branch.strip()).execute()
         if res.data and len(res.data) > 0:
-            return res.data[0].get("time_limit", 0)
+            return {
+                "time_limit": res.data[0].get("time_limit", 30),
+                "passkey": str(res.data[0].get("passkey") or "").strip()
+            }
     except Exception:
         pass
-    return 0
+    return {"time_limit": 30, "passkey": ""}
 
-def save_branch_time_limit(branch, time_limit):
-    supabase.table("settings").upsert({"branch": branch, "time_limit": time_limit}).execute()
+def save_branch_settings(branch, time_limit, passkey):
+    payload = {
+        "branch": branch.strip(),
+        "time_limit": int(time_limit),
+        "passkey": str(passkey).strip()
+    }
+    supabase.table("settings").upsert(payload).execute()
 
 def get_all_scores():
     try:
@@ -109,7 +117,7 @@ def get_all_scores():
 
 def get_student_score(roll_no):
     try:
-        res = supabase.table("scores").select("*").eq("roll_no", roll_no).execute()
+        res = supabase.table("scores").select("*").eq("roll_no", roll_no.strip().upper()).execute()
         if res.data and len(res.data) > 0:
             return res.data[0]
     except Exception:
@@ -118,7 +126,7 @@ def get_student_score(roll_no):
 
 def get_branch_scores(branch):
     try:
-        res = supabase.table("scores").select("*").ilike("branch", branch).order("score", desc=True).execute()
+        res = supabase.table("scores").select("*").ilike("branch", branch.strip()).order("score", desc=True).execute()
         return res.data or []
     except Exception:
         return []
@@ -130,9 +138,9 @@ def delete_student_score(roll_no):
     supabase.table("scores").delete().eq("roll_no", roll_no).execute()
 
 def delete_branch_data(branch):
-    supabase.table("questions").delete().ilike("branch", branch).execute()
-    supabase.table("scores").delete().ilike("branch", branch).execute()
-    supabase.table("settings").delete().ilike("branch", branch).execute()
+    supabase.table("questions").delete().ilike("branch", branch.strip()).execute()
+    supabase.table("scores").delete().ilike("branch", branch.strip()).execute()
+    supabase.table("settings").delete().ilike("branch", branch.strip()).execute()
 
 def wipe_all_data():
     supabase.table("questions").delete().neq("id", -1).execute()
@@ -157,32 +165,47 @@ def login_screen():
     
     tab1, tab2 = st.tabs(["👨🎓 Student Entry", "👨🏫 Admin Login"])
     
+    # 1. STUDENT LOGIN
     with tab1:
-        st.subheader("Enter your details to start")
+        st.subheader("Enter your details to start the quiz")
         with st.form("student_login_form"):
             name = st.text_input("Full Name")
             rollno = st.text_input("Roll Number")
             section = st.text_input("Section")
             branch = st.text_input("Course & Semester (e.g., BCA 2nd Sem)")
+            student_passkey = st.text_input("🔑 Quiz Passkey (provided by instructor)", type="password")
             
             submit_student = st.form_submit_button("🚀 Start Quiz", type="primary", use_container_width=True)
             
             if submit_student:
-                if name and rollno and section and branch:
-                    st.session_state.logged_in = True
-                    st.session_state.role = "candidate"
-                    st.session_state.user_id = rollno.strip().upper()
-                    st.session_state.student_info = {
-                        "Name": name.strip(),
-                        "Roll No": rollno.strip().upper(),
-                        "Section": section.strip(),
-                        "Branch": branch.strip()
-                    }
-                    st.session_state.start_time = time.time()
-                    st.rerun()
+                if not (name and rollno and section and branch):
+                    st.error("Please fill in all basic student details.")
                 else:
-                    st.error("Please fill in all details.")
+                    # Verify if questions exist for this branch
+                    branch_questions = get_questions_by_branch(branch)
+                    if not branch_questions:
+                        st.error(f"❌ No active quiz found for '{branch.strip()}'. Please verify the course/semester name.")
+                    else:
+                        # Check passkey verification
+                        branch_config = get_branch_settings(branch)
+                        required_passkey = branch_config.get("passkey", "")
+                        
+                        if required_passkey and student_passkey.strip() != required_passkey:
+                            st.error("❌ Incorrect Quiz Passkey. Please request the passkey from your instructor.")
+                        else:
+                            st.session_state.logged_in = True
+                            st.session_state.role = "candidate"
+                            st.session_state.user_id = rollno.strip().upper()
+                            st.session_state.student_info = {
+                                "Name": name.strip(),
+                                "Roll No": rollno.strip().upper(),
+                                "Section": section.strip(),
+                                "Branch": branch.strip()
+                            }
+                            st.session_state.start_time = time.time()
+                            st.rerun()
                     
+    # 2. ADMIN LOGIN
     with tab2:
         st.subheader("Admin Access")
         with st.form("admin_login_form"):
@@ -208,7 +231,7 @@ def admin_dashboard():
     with col2:
         st.button("🚪 Logout", on_click=logout, use_container_width=True)
     
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["➕ Create Question", "✏️ View/Edit", "⏱️ Settings", "📊 Results", "🗑️ Manage Data"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["➕ Create Question", "✏️ View/Edit", "⏱️ Settings & Passkey", "📊 Results", "🗑️ Manage Data"])
     
     questions = get_all_questions()
     existing_branches = sorted(list(set([q["branch"] for q in questions if q.get("branch")])))
@@ -351,25 +374,41 @@ def admin_dashboard():
                                 except Exception as e:
                                     st.error(f"Failed to delete question: {e}")
 
-    # 3. QUIZ SETTINGS
+    # 3. QUIZ SETTINGS & PASSKEY
     with tab3:
-        st.subheader("Set Time Limits")
+        st.subheader("Set Time Limits & Quiz Passkeys")
         if not existing_branches:
             st.info("Add questions for a branch first.")
         else:
-            settings_data = get_all_settings()
-            with st.form("timer_form"):
-                branch_for_timer = st.selectbox("Select Branch", existing_branches)
-                current_limit = settings_data.get(branch_for_timer, 30)
-                time_limit = st.number_input("Time Limit (in minutes, 0 for no limit)", min_value=0, value=current_limit)
-                if st.form_submit_button("Save Time Limit", type="primary"):
+            branch_for_timer = st.selectbox("Select Branch", existing_branches)
+            current_settings = get_branch_settings(branch_for_timer)
+            
+            with st.form("settings_passkey_form"):
+                time_limit = st.number_input(
+                    "Time Limit (in minutes, 0 for no limit)", 
+                    min_value=0, 
+                    value=current_settings.get("time_limit", 30)
+                )
+                passkey_input = st.text_input(
+                    "🔑 Quiz Passkey (Required for students to attempt the quiz)", 
+                    value=current_settings.get("passkey", "")
+                )
+                
+                if st.form_submit_button("Save Settings & Passkey", type="primary"):
                     try:
-                        save_branch_time_limit(branch_for_timer, time_limit)
-                        st.toast(f"✅ Time limit for {branch_for_timer} saved ({time_limit} mins)!", icon="⏱️")
+                        save_branch_settings(branch_for_timer, time_limit, passkey_input)
+                        st.toast(f"✅ Settings for {branch_for_timer} updated!", icon="🔐")
                         time.sleep(0.6)
                         st.rerun()
                     except Exception as e:
                         st.error(f"Failed to save settings: {e}")
+            
+            st.divider()
+            st.write("📋 **Active Branch Quiz Configurations:**")
+            all_cfg = get_all_settings()
+            if all_cfg:
+                df_cfg = pd.DataFrame(all_cfg)
+                st.dataframe(df_cfg, use_container_width=True)
 
     # 4. VIEW RESULTS & MANAGE
     with tab4:
@@ -541,7 +580,8 @@ def candidate_dashboard():
 
     st.divider()
 
-    time_limit = get_branch_time_limit(student_branch)
+    branch_config = get_branch_settings(student_branch)
+    time_limit = branch_config.get("time_limit", 30)
     time_expired = False
     
     if time_limit > 0:
