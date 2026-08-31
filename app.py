@@ -2,6 +2,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 import time
+import html
 from supabase import create_client, Client
 
 # --- PAGE CONFIGURATION ---
@@ -92,6 +93,16 @@ st.markdown("""
         transform: translateY(-2px);
         box-shadow: 0 12px 20px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.03);
     }
+    
+    .question-text-content {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: #1e293b;
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin-bottom: 12px;
+        line-height: 1.6;
+    }
 
     /* Badges & Pills */
     .badge-mark {
@@ -106,6 +117,7 @@ st.markdown("""
         text-transform: uppercase;
         border: 1px solid #c7d2fe;
         margin-left: 6px;
+        vertical-align: middle;
     }
     .badge-neg {
         display: inline-block;
@@ -117,6 +129,7 @@ st.markdown("""
         font-weight: 600;
         border: 1px solid #fecaca;
         margin-left: 4px;
+        vertical-align: middle;
     }
 
     /* Segmented Tabs Styling */
@@ -187,18 +200,15 @@ st.markdown("""
         transform: translateY(-1px) !important;
         box-shadow: 0 6px 18px rgba(79, 70, 229, 0.35) !important;
     }
-    .stButton > button[kind="primary"]:active {
-        transform: translateY(0px) !important;
-    }
 
-    /* Secondary / Logout Buttons */
+    /* Secondary Buttons */
     .stButton > button {
         border-radius: 12px !important;
         font-weight: 600 !important;
         transition: all 0.2s ease !important;
     }
 
-    /* Input Field Polish */
+    /* Input Fields */
     .stTextInput > div > div > input, 
     .stTextArea > div > div > textarea,
     .stSelectbox > div > div {
@@ -211,14 +221,6 @@ st.markdown("""
     .stTextArea > div > div > textarea:focus {
         border-color: #6366f1 !important;
         box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2) !important;
-    }
-
-    /* Expander Styling */
-    .streamlit-expanderHeader {
-        background-color: #ffffff !important;
-        border-radius: 12px !important;
-        border: 1px solid #e2e8f0 !important;
-        font-weight: 600 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -343,7 +345,7 @@ def login_screen():
     <div class="hero-banner">
         <div style="font-size: 2.8rem; margin-bottom: 8px;">🎓</div>
         <h1 class="hero-title">Pro Quiz Portal</h1>
-        <p class="hero-subtitle">Enterprise Online Assessment & Examination System</p>
+        <p class="hero-subtitle">Enterprise Assessment & Examination Engine</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -439,7 +441,7 @@ def admin_dashboard():
         st.subheader("Create Assessment Item")
         with st.form("add_question_form"):
             target_branch = st.text_input("Target Course & Semester", placeholder="e.g. BCA 2nd Sem")
-            q_text = st.text_area("Question Stem / Description", placeholder="Enter the complete question text here...")
+            q_text = st.text_area("Question Stem / Description", placeholder="Enter question text or code snippet...")
             
             col_a, col_b = st.columns(2)
             with col_a:
@@ -697,8 +699,8 @@ def candidate_dashboard():
     
     col1, col2 = st.columns([3.5, 1])
     with col1:
-        st.markdown(f"<h2 style='margin:0;'>📝 Examination: {student_branch}</h2>", unsafe_allow_html=True)
-        st.markdown(f"<div style='font-size: 0.95rem; color: #475569; margin-top: 4px;'>Candidate: <b>{st.session_state.student_info['Name']}</b> &nbsp;|&nbsp; Roll ID: <code>{roll_no}</code> &nbsp;|&nbsp; Section: <b>{st.session_state.student_info['Section']}</b></div>", unsafe_allow_html=True)
+        st.markdown(f"<h2 style='margin:0;'>📝 Examination: {html.escape(student_branch)}</h2>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size: 0.95rem; color: #475569; margin-top: 4px;'>Candidate: <b>{html.escape(st.session_state.student_info['Name'])}</b> &nbsp;|&nbsp; Roll ID: <code>{html.escape(roll_no)}</code> &nbsp;|&nbsp; Section: <b>{html.escape(st.session_state.student_info['Section'])}</b></div>", unsafe_allow_html=True)
     with col2:
         st.button("🚪 Exit", on_click=logout, use_container_width=True)
     
@@ -732,9 +734,10 @@ def candidate_dashboard():
         saved_responses = student_record.get("responses") or {}
         
         for i, q in enumerate(my_questions):
+            safe_text = html.escape(q['text'])
             with st.container():
                 st.markdown("<div class='question-box'>", unsafe_allow_html=True)
-                st.markdown(f"**Item {i+1}: {q['text']}** <span class='badge-mark'>{q['marks']} Marks</span>", unsafe_allow_html=True)
+                st.markdown(f"<div class='question-text-content'>Item {i+1}: {safe_text} <span class='badge-mark'>{q['marks']} Marks</span></div>", unsafe_allow_html=True)
                 
                 ans = saved_responses.get(str(i), None)
                 
@@ -834,7 +837,7 @@ def candidate_dashboard():
                         return;
                     }}
                     if (remaining <= 120) {{
-                        display.style.color = "#f87171"; // Red alert when under 2 minutes
+                        display.style.color = "#f87171";
                     }}
                     display.innerText = formatTime(remaining);
                     remaining--;
@@ -849,6 +852,7 @@ def candidate_dashboard():
     with st.form("quiz_form"):
         user_answers = {}
         for i, q in enumerate(my_questions):
+            safe_text = html.escape(q['text'])
             st.markdown("<div class='question-box'>", unsafe_allow_html=True)
             
             if q["type"] == "MCQ":
@@ -856,7 +860,7 @@ def candidate_dashboard():
             else:
                 neg_badge = "<span class='badge-mark'>No Negative Penalty</span>"
                 
-            st.markdown(f"<div style='font-size: 1.05rem; font-weight: 600; margin-bottom: 12px;'>Q{i+1}. {q['text']} <span class='badge-mark'>{q['marks']} Marks</span> {neg_badge}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='question-text-content'>Q{i+1}. {safe_text} <span class='badge-mark'>{q['marks']} Marks</span> {neg_badge}</div>", unsafe_allow_html=True)
             
             if q["type"] == "MCQ":
                 user_answers[i] = st.radio(f"Options for Q{i+1}", q.get("options") or [], index=None, key=f"q_{i}", label_visibility="collapsed", disabled=time_expired)
@@ -868,7 +872,7 @@ def candidate_dashboard():
                     user_answers[i] = st.text_input(f"Answer for Q{i+1}", key=f"q_{i}", label_visibility="collapsed", disabled=time_expired, placeholder="Numeric value")
                 with col_unit:
                     if q.get("unit"):
-                        st.markdown(f"<div style='padding-top:6px; font-weight: 600; color: #475569;'>{q['unit']}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='padding-top:6px; font-weight: 600; color: #475569;'>{html.escape(q['unit'])}</div>", unsafe_allow_html=True)
             
             st.markdown("</div>", unsafe_allow_html=True)
             
