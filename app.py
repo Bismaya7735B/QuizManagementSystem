@@ -3,6 +3,7 @@ import streamlit.components.v1 as components
 import pandas as pd
 import time
 import html
+import json
 from supabase import create_client, Client
 
 # --- PAGE CONFIGURATION ---
@@ -104,6 +105,32 @@ st.markdown("""
         line-height: 1.6;
     }
 
+    /* Review Card Variations */
+    .review-box {
+        background: #ffffff;
+        padding: 22px 24px;
+        border-radius: 16px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04);
+        margin-bottom: 20px;
+        border: 1px solid #e2e8f0;
+        transition: transform 0.15s ease;
+    }
+    .review-box:hover {
+        transform: translateY(-1px);
+    }
+    .review-box-correct {
+        border-left: 6px solid #10b981;
+        background: linear-gradient(to right, #f0fdf4 0%, #ffffff 15%);
+    }
+    .review-box-wrong {
+        border-left: 6px solid #ef4444;
+        background: linear-gradient(to right, #fef2f2 0%, #ffffff 15%);
+    }
+    .review-box-skipped {
+        border-left: 6px solid #94a3b8;
+        background: linear-gradient(to right, #f8fafc 0%, #ffffff 15%);
+    }
+
     /* Badges & Pills */
     .badge-mark {
         display: inline-block;
@@ -130,6 +157,70 @@ st.markdown("""
         border: 1px solid #fecaca;
         margin-left: 4px;
         vertical-align: middle;
+    }
+    .badge-correct {
+        display: inline-block;
+        background: #dcfce7;
+        color: #15803d;
+        padding: 4px 12px;
+        border-radius: 9999px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        border: 1px solid #bbf7d0;
+        margin-left: 6px;
+        vertical-align: middle;
+    }
+    .badge-wrong {
+        display: inline-block;
+        background: #fee2e2;
+        color: #b91c1c;
+        padding: 4px 12px;
+        border-radius: 9999px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        border: 1px solid #fecaca;
+        margin-left: 6px;
+        vertical-align: middle;
+    }
+    .badge-unattempted {
+        display: inline-block;
+        background: #f1f5f9;
+        color: #64748b;
+        padding: 4px 12px;
+        border-radius: 9999px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        border: 1px solid #cbd5e1;
+        margin-left: 6px;
+        vertical-align: middle;
+    }
+
+    /* Option Review Rows */
+    .option-item {
+        padding: 10px 14px;
+        border-radius: 10px;
+        margin-bottom: 8px;
+        font-size: 0.95rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border: 1px solid #e2e8f0;
+    }
+    .option-default {
+        background-color: #f8fafc;
+        color: #334155;
+    }
+    .option-correct-key {
+        background-color: #f0fdf4;
+        border-color: #86efac;
+        color: #166534;
+        font-weight: 600;
+    }
+    .option-user-wrong {
+        background-color: #fef2f2;
+        border-color: #fca5a5;
+        color: #991b1b;
+        font-weight: 600;
     }
 
     /* Segmented Tabs Styling */
@@ -346,6 +437,19 @@ def wipe_all_data():
     supabase.table("settings").delete().neq("branch", "__none__").execute()
 
 
+def parse_saved_responses(responses_data):
+    if not responses_data:
+        return {}
+    if isinstance(responses_data, dict):
+        return responses_data
+    if isinstance(responses_data, str):
+        try:
+            return json.loads(responses_data)
+        except Exception:
+            return {}
+    return {}
+
+
 # --- SESSION STATE ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -370,49 +474,96 @@ def login_screen():
 
     # 1. CANDIDATE ENTRY
     with tab1:
-        st.markdown(
-            "<p style='font-size: 0.95rem; color: #475569; margin-bottom: 12px;'>Enter your student credentials and authorized passkey to begin your examination.</p>",
-            unsafe_allow_html=True)
-        with st.form("student_login_form"):
-            col1, col2 = st.columns(2)
-            with col1:
-                name = st.text_input("Full Name", placeholder="e.g. John Doe")
-                rollno = st.text_input("Roll Number", placeholder="e.g. 23BCA042")
-            with col2:
-                section = st.text_input("Section", placeholder="e.g. Section A")
-                branch = st.text_input("Course & Semester", placeholder="e.g. BCA 2nd Sem")
+        candidate_subtab1, candidate_subtab2 = st.tabs([
+            "🚀 Take Assessment", 
+            "🔍 View Past Assessment & Solutions"
+        ])
 
-            student_passkey = st.text_input("🔑 Quiz Passkey (Issued by Instructor)", type="password",
-                                            placeholder="Enter authorization passkey")
+        # SUBTAB 1: LIVE ASSESSMENT
+        with candidate_subtab1:
+            st.markdown(
+                "<p style='font-size: 0.95rem; color: #475569; margin-bottom: 12px;'>Enter your student credentials and authorized passkey to begin or resume your examination.</p>",
+                unsafe_allow_html=True)
+            with st.form("student_login_form"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    name = st.text_input("Full Name", placeholder="e.g. John Doe")
+                    rollno = st.text_input("Roll Number", placeholder="e.g. 23BCA042")
+                with col2:
+                    section = st.text_input("Section", placeholder="e.g. Section A")
+                    branch = st.text_input("Course & Semester", placeholder="e.g. BCA 2nd Sem")
 
-            st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
-            submit_student = st.form_submit_button("🚀 Start Assessment", type="primary", use_container_width=True)
+                student_passkey = st.text_input("🔑 Quiz Passkey (Issued by Instructor)", type="password",
+                                                placeholder="Enter authorization passkey")
 
-            if submit_student:
-                if not (name and rollno and section and branch):
-                    st.error("⚠️ Please fill in all candidate details.")
-                else:
-                    branch_questions = get_questions_by_branch(branch)
-                    if not branch_questions:
-                        st.error(
-                            f"❌ No active quiz found for '{branch.strip()}'. Please check the exact course and semester name.")
+                st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+                submit_student = st.form_submit_button("🚀 Access Assessment", type="primary", use_container_width=True)
+
+                if submit_student:
+                    if not (name and rollno and section and branch):
+                        st.error("⚠️ Please fill in all candidate details.")
                     else:
-                        branch_config = get_branch_settings(branch)
-                        required_passkey = branch_config.get("passkey", "")
+                        branch_questions = get_questions_by_branch(branch)
+                        if not branch_questions:
+                            st.error(
+                                f"❌ No active quiz found for '{branch.strip()}'. Please check the exact course and semester name.")
+                        else:
+                            branch_config = get_branch_settings(branch)
+                            required_passkey = branch_config.get("passkey", "")
 
-                        if required_passkey and student_passkey.strip() != required_passkey:
-                            st.error("❌ Invalid Quiz Passkey. Please verify with your instructor.")
+                            # Check if student already submitted previously
+                            existing_score = get_student_score(rollno)
+
+                            if required_passkey and student_passkey.strip() != required_passkey and not existing_score:
+                                st.error("❌ Invalid Quiz Passkey. Please verify with your instructor.")
+                            else:
+                                st.session_state.logged_in = True
+                                st.session_state.role = "candidate"
+                                st.session_state.user_id = rollno.strip().upper()
+                                st.session_state.student_info = {
+                                    "Name": name.strip(),
+                                    "Roll No": rollno.strip().upper(),
+                                    "Section": section.strip(),
+                                    "Branch": branch.strip()
+                                }
+                                if not existing_score:
+                                    st.session_state.start_time = time.time()
+                                st.rerun()
+
+        # SUBTAB 2: DIRECT PAST REVIEW FOR STUDENTS AT ANY FUTURE DATE
+        with candidate_subtab2:
+            st.markdown(
+                "<p style='font-size: 0.95rem; color: #475569; margin-bottom: 12px;'>Already taken the quiz? Enter your Roll Number and Course to review your score, question paper, and complete answer key anytime.</p>",
+                unsafe_allow_html=True)
+            with st.form("student_history_form"):
+                col_h1, col_h2 = st.columns(2)
+                with col_h1:
+                    hist_roll = st.text_input("Roll Number", placeholder="e.g. 23BCA042", key="hist_roll")
+                with col_h2:
+                    hist_branch = st.text_input("Course & Semester", placeholder="e.g. BCA 2nd Sem", key="hist_branch")
+
+                st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+                submit_history = st.form_submit_button("🔍 Retrieve My Answer Sheet", type="primary", use_container_width=True)
+
+                if submit_history:
+                    if not (hist_roll and hist_branch):
+                        st.error("⚠️ Please enter both your Roll Number and Course/Semester.")
+                    else:
+                        clean_roll = hist_roll.strip().upper()
+                        clean_branch = hist_branch.strip()
+                        rec = get_student_score(clean_roll)
+                        if not rec:
+                            st.error(f"❌ No completed assessment record found for Roll Number '{clean_roll}'.")
                         else:
                             st.session_state.logged_in = True
                             st.session_state.role = "candidate"
-                            st.session_state.user_id = rollno.strip().upper()
+                            st.session_state.user_id = clean_roll
                             st.session_state.student_info = {
-                                "Name": name.strip(),
-                                "Roll No": rollno.strip().upper(),
-                                "Section": section.strip(),
-                                "Branch": branch.strip()
+                                "Name": rec.get("name", "Student"),
+                                "Roll No": clean_roll,
+                                "Section": rec.get("section", ""),
+                                "Branch": clean_branch
                             }
-                            st.session_state.start_time = time.time()
                             st.rerun()
 
     # 2. ADMIN LOGIN
@@ -726,14 +877,14 @@ def admin_dashboard():
 
 # --- CANDIDATE DASHBOARD ---
 def candidate_dashboard():
-    student_branch = st.session_state.student_info['Branch']
+    student_branch = st.session_state.student_info.get('Branch', '')
     roll_no = st.session_state.user_id
 
     col1, col2 = st.columns([3.5, 1])
     with col1:
         st.markdown(f"<h2 style='margin:0;'>📝 Examination: {html.escape(student_branch)}</h2>", unsafe_allow_html=True)
         st.markdown(
-            f"<div style='font-size: 0.95rem; color: #475569; margin-top: 4px;'>Candidate: <b>{html.escape(st.session_state.student_info['Name'])}</b> &nbsp;|&nbsp; Roll ID: <code>{html.escape(roll_no)}</code> &nbsp;|&nbsp; Section: <b>{html.escape(st.session_state.student_info['Section'])}</b></div>",
+            f"<div style='font-size: 0.95rem; color: #475569; margin-top: 4px;'>Candidate: <b>{html.escape(st.session_state.student_info.get('Name', ''))}</b> &nbsp;|&nbsp; Roll ID: <code>{html.escape(roll_no)}</code> &nbsp;|&nbsp; Section: <b>{html.escape(st.session_state.student_info.get('Section', ''))}</b></div>",
             unsafe_allow_html=True)
     with col2:
         st.button("🚪 Exit", on_click=logout, use_container_width=True)
@@ -744,7 +895,7 @@ def candidate_dashboard():
     student_record = get_student_score(roll_no)
 
     # -------------------------------------------------------------
-    # IF QUIZ ALREADY SUBMITTED: SHOW RESULT SCREEN & LEADERBOARD
+    # IF QUIZ ALREADY SUBMITTED: SHOW RESULT SCREEN & FULL QUESTION/ANSWER REVIEW
     # -------------------------------------------------------------
     if student_record is not None:
         st.markdown("""
@@ -768,6 +919,139 @@ def candidate_dashboard():
         m4.metric("Penalty Deducted", f"-{student_record.get('deducted', 0.0)}")
 
         st.divider()
+
+        # Detailed Question & Answer Review Section
+        st.markdown("### 📋 Question Paper & Answer Sheet Review")
+        st.caption("Review all questions, your selected answers, and the official answer keys below.")
+
+        student_responses = parse_saved_responses(student_record.get("responses"))
+
+        filter_choice = st.radio(
+            "Filter Questions:",
+            ["All Items", "Correct Only (✔)", "Incorrect Only (❌)", "Unattempted Only (⚪)"],
+            horizontal=True
+        )
+
+        for i, q in enumerate(my_questions):
+            # Fetch student answer by string index or id
+            user_ans = student_responses.get(str(i))
+            if user_ans is None and q.get("id"):
+                user_ans = student_responses.get(str(q.get("id")))
+
+            q_type = q.get("type", "MCQ")
+            marks = q.get("marks", 1)
+            correct_key = q.get("correct")
+
+            # Determine correctness
+            is_unattempted = (user_ans is None or user_ans == "" or user_ans == [])
+            is_correct = False
+
+            if not is_unattempted:
+                if q_type == "MCQ":
+                    is_correct = (user_ans == correct_key)
+                elif q_type == "MSQ":
+                    correct_set = set(correct_key) if isinstance(correct_key, list) else {correct_key}
+                    ans_set = set(user_ans) if isinstance(user_ans, list) else {user_ans}
+                    is_correct = (ans_set == correct_set)
+                elif q_type == "Numerical":
+                    try:
+                        is_correct = (float(user_ans) == float(correct_key))
+                    except (ValueError, TypeError):
+                        is_correct = False
+
+            # Filter logic
+            if filter_choice == "Correct Only (✔)" and not is_correct:
+                continue
+            if filter_choice == "Incorrect Only (❌)" and (is_correct or is_unattempted):
+                continue
+            if filter_choice == "Unattempted Only (⚪)" and not is_unattempted:
+                continue
+
+            # Card Styling & Badge
+            if is_unattempted:
+                box_class = "review-box review-box-skipped"
+                status_badge = "<span class='badge-unattempted'>⚪ Skipped / Unattempted (0 Marks)</span>"
+            elif is_correct:
+                box_class = "review-box review-box-correct"
+                status_badge = f"<span class='badge-correct'>✔ Correct (+{marks} Marks)</span>"
+            else:
+                box_class = "review-box review-box-wrong"
+                if q_type == "MCQ":
+                    penalty_text = f"-{marks * 0.25} Marks Penalty"
+                else:
+                    penalty_text = "0 Marks (No Penalty)"
+                status_badge = f"<span class='badge-wrong'>❌ Incorrect ({penalty_text})</span>"
+
+            safe_q_text = html.escape(str(q.get("text", "")))
+
+            # Render Question Box
+            st.markdown(f"""
+            <div class="{box_class}">
+                <div class="question-text-content">
+                    <b>Q{i + 1}.</b> {safe_q_text} 
+                    <span class='badge-mark'>{marks} Marks</span>
+                    {status_badge}
+                </div>
+            """, unsafe_allow_html=True)
+
+            # Render MCQ / MSQ Options Review
+            if q_type in ["MCQ", "MSQ"]:
+                options = q.get("options") or []
+                for opt in options:
+                    opt_str = str(opt).strip()
+                    is_this_correct_key = False
+                    is_this_user_pick = False
+
+                    if q_type == "MCQ":
+                        is_this_correct_key = (opt_str == str(correct_key).strip())
+                        is_this_user_pick = (not is_unattempted and opt_str == str(user_ans).strip())
+                    else:  # MSQ
+                        correct_list = [str(c).strip() for c in (correct_key if isinstance(correct_key, list) else [correct_key])]
+                        user_list = [str(u).strip() for u in (user_ans if isinstance(user_ans, list) else [user_ans])] if not is_unattempted else []
+                        is_this_correct_key = (opt_str in correct_list)
+                        is_this_user_pick = (opt_str in user_list)
+
+                    # Determine row design and tags
+                    if is_this_correct_key and is_this_user_pick:
+                        row_class = "option-item option-correct-key"
+                        status_tag = "<span style='font-size:0.8rem; font-weight:700; color:#166534;'>✔ Your Choice (Correct Key)</span>"
+                    elif is_this_correct_key and not is_this_user_pick:
+                        row_class = "option-item option-correct-key"
+                        status_tag = "<span style='font-size:0.8rem; font-weight:700; color:#166534;'>✔ Official Correct Key</span>"
+                    elif not is_this_correct_key and is_this_user_pick:
+                        row_class = "option-item option-user-wrong"
+                        status_tag = "<span style='font-size:0.8rem; font-weight:700; color:#991b1b;'>❌ Your Choice (Incorrect)</span>"
+                    else:
+                        row_class = "option-item option-default"
+                        status_tag = ""
+
+                    st.markdown(f"""
+                        <div class="{row_class}">
+                            <span>{html.escape(opt_str)}</span>
+                            <span>{status_tag}</span>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+            # Render Numerical Questions Review
+            elif q_type == "Numerical":
+                unit_str = f" {html.escape(q.get('unit', ''))}" if q.get("unit") else ""
+                user_display = html.escape(str(user_ans)) if not is_unattempted else "<span style='color:#64748b;'>Not Attempted</span>"
+                key_display = html.escape(str(correct_key))
+
+                st.markdown(f"""
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px 16px; margin-top:8px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                        <span style="color:#475569; font-weight:600;">Your Submitted Answer:</span>
+                        <b>{user_display}{unit_str}</b>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; border-top:1px dashed #cbd5e1; padding-top:6px;">
+                        <span style="color:#166534; font-weight:600;">Official Correct Key:</span>
+                        <b style="color:#166534;">{key_display}{unit_str}</b>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown("</div>", unsafe_allow_html=True)
 
         st.divider()
 
@@ -891,8 +1175,8 @@ def candidate_dashboard():
                     st.error("Submission rejected. The examination window elapsed.")
                     late_record = {
                         "roll_no": roll_no,
-                        "name": st.session_state.student_info["Name"],
-                        "section": st.session_state.student_info["Section"],
+                        "name": st.session_state.student_info.get("Name", ""),
+                        "section": st.session_state.student_info.get("Section", ""),
                         "branch": student_branch,
                         "score": 0.0,
                         "correct": 0,
@@ -945,8 +1229,8 @@ def candidate_dashboard():
 
             final_record = {
                 "roll_no": roll_no,
-                "name": st.session_state.student_info["Name"],
-                "section": st.session_state.student_info["Section"],
+                "name": st.session_state.student_info.get("Name", ""),
+                "section": st.session_state.student_info.get("Section", ""),
                 "branch": student_branch,
                 "score": score,
                 "correct": correct_count,
