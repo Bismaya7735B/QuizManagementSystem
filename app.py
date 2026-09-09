@@ -1515,9 +1515,6 @@ def candidate_dashboard():
                     finalize_exam(user_answers, is_late=True)
                     return
 
-            finalize_exam(user_answers, is_vi_exam(user_answers, is_late=True))
-                    return
-
             finalize_exam(user_answers, is_violation=is_tab_violation)
 
 
