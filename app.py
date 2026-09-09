@@ -105,6 +105,17 @@ st.markdown("""
         line-height: 1.6;
     }
 
+    /* Warning Banner for Tab Violations */
+    .warning-card {
+        background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+        border: 1.5px solid #ef4444;
+        border-radius: 14px;
+        padding: 16px 20px;
+        margin-bottom: 20px;
+        color: #991b1b;
+        box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.1);
+    }
+
     /* Review Card Variations */
     .review-box {
         background: #ffffff;
@@ -298,21 +309,6 @@ st.markdown("""
         font-weight: 600 !important;
         transition: all 0.2s ease !important;
     }
-
-    /* Input Fields */
-    .stTextInput > div > div > input, 
-    .stTextArea > div > div > textarea,
-    .stSelectbox > div > div {
-        border-radius: 10px !important;
-        border: 1px solid #cbd5e1 !important;
-        background-color: #ffffff !important;
-        font-size: 0.95rem !important;
-    }
-    .stTextInput > div > div > input:focus, 
-    .stTextArea > div > div > textarea:focus {
-        border-color: #6366f1 !important;
-        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2) !important;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -450,14 +446,52 @@ def parse_saved_responses(responses_data):
     return {}
 
 
-# --- SESSION STATE ---
+# --- PERSISTENT SESSION RESTORATION (Prevents logout on browser reload) ---
+query_params = st.query_params
+
 if "logged_in" not in st.session_state:
+    saved_role = query_params.get("session_role")
+    saved_user = query_params.get("session_user")
+    if saved_role == "admin" and saved_user == "admin":
+        st.session_state.logged_in = True
+        st.session_state.user_id = "admin"
+        st.session_state.role = "admin"
+        st.session_state.student_info = {}
+    elif saved_role == "candidate" and saved_user:
+        st.session_state.logged_in = True
+        st.session_state.user_id = saved_user
+        st.session_state.role = "candidate"
+        st.session_state.student_info = {
+            "Name": query_params.get("c_name", "Candidate"),
+            "Roll No": saved_user,
+            "Section": query_params.get("c_section", ""),
+            "Branch": query_params.get("c_branch", "")
+        }
+    else:
+        st.session_state.logged_in = False
+        st.session_state.user_id = ""
+        st.session_state.role = ""
+        st.session_state.student_info = {}
+
+if "start_time" not in st.session_state:
+    st.session_state.start_time = None
+
+if "tab_switch_count" not in st.session_state:
+    st.session_state.tab_switch_count = 0
+
+if "auto_submitted_violation" not in st.session_state:
+    st.session_state.auto_submitted_violation = False
+
+
+def logout():
     st.session_state.logged_in = False
     st.session_state.user_id = ""
     st.session_state.role = ""
     st.session_state.student_info = {}
-if "start_time" not in st.session_state:
     st.session_state.start_time = None
+    st.session_state.tab_switch_count = 0
+    st.session_state.auto_submitted_violation = False
+    st.query_params.clear()
 
 
 # --- LOGIN SCREEN ---
@@ -472,14 +506,13 @@ def login_screen():
 
     tab1, tab2 = st.tabs(["👨‍🎓 Candidate Access", "🔐 Administrator Portal"])
 
-    # 1. CANDIDATE ENTRY
+    # 1. CANDIDATE ACCESS
     with tab1:
         candidate_subtab1, candidate_subtab2 = st.tabs([
             "🚀 Take Assessment", 
             "🔍 View Past Assessment & Solutions"
         ])
 
-        # SUBTAB 1: LIVE ASSESSMENT
         with candidate_subtab1:
             st.markdown(
                 "<p style='font-size: 0.95rem; color: #475569; margin-bottom: 12px;'>Enter your student credentials and authorized passkey to begin or resume your examination.</p>",
@@ -505,13 +538,10 @@ def login_screen():
                     else:
                         branch_questions = get_questions_by_branch(branch)
                         if not branch_questions:
-                            st.error(
-                                f"❌ No active quiz found for '{branch.strip()}'. Please check the exact course and semester name.")
+                            st.error(f"❌ No active quiz found for '{branch.strip()}'. Please check the exact course and semester name.")
                         else:
                             branch_config = get_branch_settings(branch)
                             required_passkey = branch_config.get("passkey", "")
-
-                            # Check if student already submitted previously
                             existing_score = get_student_score(rollno)
 
                             if required_passkey and student_passkey.strip() != required_passkey and not existing_score:
@@ -526,14 +556,21 @@ def login_screen():
                                     "Section": section.strip(),
                                     "Branch": branch.strip()
                                 }
+                                # Save in URL params so page reload won't log out
+                                st.query_params["session_role"] = "candidate"
+                                st.query_params["session_user"] = rollno.strip().upper()
+                                st.query_params["c_name"] = name.strip()
+                                st.query_params["c_section"] = section.strip()
+                                st.query_params["c_branch"] = branch.strip()
+
                                 if not existing_score:
                                     st.session_state.start_time = time.time()
+                                    st.session_state.tab_switch_count = 0
                                 st.rerun()
 
-        # SUBTAB 2: DIRECT PAST REVIEW FOR STUDENTS AT ANY FUTURE DATE
         with candidate_subtab2:
             st.markdown(
-                "<p style='font-size: 0.95rem; color: #475569; margin-bottom: 12px;'>Already taken the quiz? Enter your Roll Number and Course to review your score, question paper, and complete answer key anytime.</p>",
+                "<p style='font-size: 0.95rem; color: #475569; margin-bottom: 12px;'>Review your score, submitted questions, and solutions anytime without needing a passkey.</p>",
                 unsafe_allow_html=True)
             with st.form("student_history_form"):
                 col_h1, col_h2 = st.columns(2)
@@ -564,6 +601,11 @@ def login_screen():
                                 "Section": rec.get("section", ""),
                                 "Branch": clean_branch
                             }
+                            st.query_params["session_role"] = "candidate"
+                            st.query_params["session_user"] = clean_roll
+                            st.query_params["c_name"] = rec.get("name", "Student")
+                            st.query_params["c_section"] = rec.get("section", "")
+                            st.query_params["c_branch"] = clean_branch
                             st.rerun()
 
     # 2. ADMIN LOGIN
@@ -583,6 +625,8 @@ def login_screen():
                     st.session_state.logged_in = True
                     st.session_state.user_id = "admin"
                     st.session_state.role = "admin"
+                    st.query_params["session_role"] = "admin"
+                    st.query_params["session_user"] = "admin"
                     st.rerun()
                 else:
                     st.error("❌ Invalid administrative credentials.")
@@ -590,28 +634,89 @@ def login_screen():
 
 # --- ADMIN DASHBOARD ---
 def admin_dashboard():
-    col1, col2 = st.columns([3.5, 1])
+    col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
         st.markdown("<h2 style='margin:0;'>⚙️ Examination Control Center</h2>", unsafe_allow_html=True)
-        st.caption("Manage questions, branch security passkeys, durations, and student submissions.")
+        st.caption("Manage questions, security passkeys, durations, and student submissions.")
     with col2:
+        if st.button("🔄 Refresh Data", use_container_width=True):
+            st.toast("Updated with latest database records.", icon="🔄")
+            time.sleep(0.3)
+            st.rerun()
+    with col3:
         st.button("🚪 Log Out", on_click=logout, use_container_width=True)
 
     st.write("---")
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📊 Score Analytics",
         "➕ Add Question",
         "✏️ Question Bank",
         "🔐 Passkey & Limits",
-        "📊 Score Analytics",
         "🗑️ Data Management"
     ])
 
     questions = get_all_questions()
     existing_branches = sorted(list(set([q["branch"] for q in questions if q.get("branch")])))
+    scores_data = get_all_scores()
 
-    # 1. CREATE QUESTION
+    # 1. VIEW RESULTS & PERFORMANCE
     with tab1:
+        st.subheader("Student Submissions & Real-Time Performance")
+
+        # Live quick metrics
+        total_subs = len(scores_data)
+        avg_score = (sum(float(s["score"]) for s in scores_data) / total_subs) if total_subs > 0 else 0.0
+        active_courses = len(set([s["branch"] for s in scores_data])) if scores_data else 0
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Candidates Submitted", f"{total_subs}")
+        m2.metric("Average Score", f"{avg_score:.2f}")
+        m3.metric("Participating Courses", f"{active_courses}")
+
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+
+        if not scores_data:
+            st.info("ℹ️ No examination records submitted yet.")
+        else:
+            results_list = []
+            for item in scores_data:
+                results_list.append({
+                    "Roll No": item["roll_no"],
+                    "Candidate Name": item["name"],
+                    "Course": item["branch"],
+                    "Final Score": float(item["score"]),
+                    "Correct": item.get("correct", 0),
+                    "Incorrect": item.get("wrong", 0),
+                    "Status": item.get("status", "Completed")
+                })
+            df = pd.DataFrame(results_list)
+            branches = sorted(df["Course"].unique().tolist())
+            selected_branch = st.selectbox("Filter Submissions by Course", ["All Courses"] + branches)
+
+            if selected_branch != "All Courses":
+                df = df[df["Course"] == selected_branch]
+            st.dataframe(df, use_container_width=True)
+
+            st.divider()
+            st.markdown("#### 🗑️ Revoke Candidate Submission (Allow Retake)")
+            student_options = [f"{item['roll_no']} - {item['name']} ({item['branch']})" for item in scores_data]
+
+            with st.form("delete_student_form"):
+                student_to_delete = st.selectbox("Select Candidate Record to Purge", student_options)
+                if st.form_submit_button("Revoke & Allow Retake"):
+                    if student_to_delete:
+                        roll_to_delete = student_to_delete.split(" - ")[0]
+                        try:
+                            delete_student_score(roll_to_delete)
+                            st.toast(f"✅ Record for {roll_to_delete} removed.", icon="🗑️")
+                            time.sleep(0.6)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Database error: {e}")
+
+    # 2. CREATE QUESTION
+    with tab2:
         st.subheader("Create Assessment Item")
         with st.form("add_question_form"):
             target_branch = st.text_input("Target Course & Semester", placeholder="e.g. BCA 2nd Sem")
@@ -674,8 +779,8 @@ def admin_dashboard():
                         except Exception as e:
                             st.error(f"Database error: {e}")
 
-    # 2. VIEW/EDIT QUESTIONS
-    with tab2:
+    # 3. VIEW/EDIT QUESTIONS
+    with tab3:
         st.subheader("Manage Existing Questions")
         if not existing_branches:
             st.info("ℹ️ No questions currently populated in the database.")
@@ -756,8 +861,8 @@ def admin_dashboard():
                                 except Exception as e:
                                     st.error(f"Database error: {e}")
 
-    # 3. QUIZ SETTINGS & PASSKEY
-    with tab3:
+    # 4. QUIZ SETTINGS & PASSKEY
+    with tab4:
         st.subheader("Quiz Passkeys & Time Window Configurations")
         if not existing_branches:
             st.info("Please create questions for a branch before configuring policies.")
@@ -795,51 +900,7 @@ def admin_dashboard():
                 df_cfg.columns = ["Course / Branch", "Time Limit (Mins)", "Active Passkey"]
                 st.dataframe(df_cfg, use_container_width=True)
 
-    # 4. VIEW RESULTS & MANAGE
-    with tab4:
-        st.subheader("Student Performance & Records")
-        scores_data = get_all_scores()
-        if not scores_data:
-            st.info("ℹ️ No examination records submitted yet.")
-        else:
-            results_list = []
-            for item in scores_data:
-                results_list.append({
-                    "Roll No": item["roll_no"],
-                    "Candidate Name": item["name"],
-                    "Course": item["branch"],
-                    "Final Score": float(item["score"]),
-                    "Correct": item.get("correct", 0),
-                    "Incorrect": item.get("wrong", 0),
-                    "Status": item.get("status", "Completed")
-                })
-            df = pd.DataFrame(results_list)
-            branches = sorted(df["Course"].unique().tolist())
-            selected_branch = st.selectbox("Filter Leaderboard by Course", ["All Courses"] + branches)
-
-            if selected_branch != "All Courses":
-                df = df[df["Course"] == selected_branch]
-            st.dataframe(df, use_container_width=True)
-
-            st.divider()
-
-            st.markdown("#### 🗑️ Revoke Candidate Submission (Allow Retake)")
-            student_options = [f"{item['roll_no']} - {item['name']} ({item['branch']})" for item in scores_data]
-
-            with st.form("delete_student_form"):
-                student_to_delete = st.selectbox("Select Candidate Record to Purge", student_options)
-                if st.form_submit_button("Revoke & Allow Retake"):
-                    if student_to_delete:
-                        roll_to_delete = student_to_delete.split(" - ")[0]
-                        try:
-                            delete_student_score(roll_to_delete)
-                            st.toast(f"✅ Record for {roll_to_delete} removed.", icon="🗑️")
-                            time.sleep(0.6)
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Database error: {e}")
-
-    # 5. MANAGE DATA
+    # 5. DANGER ZONE
     with tab5:
         st.subheader("Administrative Danger Zone")
         if existing_branches:
@@ -895,18 +956,29 @@ def candidate_dashboard():
     student_record = get_student_score(roll_no)
 
     # -------------------------------------------------------------
-    # IF QUIZ ALREADY SUBMITTED: SHOW RESULT SCREEN & FULL QUESTION/ANSWER REVIEW
+    # IF QUIZ ALREADY SUBMITTED: SHOW RESULT SCREEN & FULL REVIEW
     # -------------------------------------------------------------
     if student_record is not None:
-        st.markdown("""
-            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 16px; padding: 20px; text-align: center; margin-bottom: 24px;">
-                <div style="font-size: 2.2rem;">🎉</div>
-                <h2 style="color: #166534; margin: 4px 0 0 0;">Assessment Completed Successfully</h2>
-                <p style="color: #15803d; font-size: 0.95rem; margin: 4px 0 0 0;">Your responses have been recorded and graded automatically.</p>
-            </div>
+        is_violation = ("Tab Switch" in student_record.get("status", ""))
+
+        if is_violation:
+            st.markdown("""
+                <div class="warning-card">
+                    <div style="font-size: 1.8rem; margin-bottom: 4px;">⚠️</div>
+                    <h3 style="color: #991b1b; margin: 0 0 6px 0;">Quiz Auto-Submitted Due to Proctoring Violation</h3>
+                    <p style="margin: 0; font-size: 0.95rem;">You switched browser tabs or windows more than once during the examination. Your assessment was locked and automatically submitted.</p>
+                </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+                <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 16px; padding: 20px; text-align: center; margin-bottom: 24px;">
+                    <div style="font-size: 2.2rem;">🎉</div>
+                    <h2 style="color: #166534; margin: 4px 0 0 0;">Assessment Completed Successfully</h2>
+                    <p style="color: #15803d; font-size: 0.95rem; margin: 4px 0 0 0;">Your responses have been recorded and graded automatically.</p>
+                </div>
             """, unsafe_allow_html=True)
 
-        # Calculate Total Marks and Total Items
+        # Performance Metrics
         total_possible_marks = sum(q.get('marks', 1) for q in my_questions)
         total_items = len(my_questions)
         percentage = (float(student_record['score']) / total_possible_marks * 100) if total_possible_marks > 0 else 0.0
@@ -933,7 +1005,6 @@ def candidate_dashboard():
         )
 
         for i, q in enumerate(my_questions):
-            # Fetch student answer by string index or id
             user_ans = student_responses.get(str(i))
             if user_ans is None and q.get("id"):
                 user_ans = student_responses.get(str(q.get("id")))
@@ -942,7 +1013,6 @@ def candidate_dashboard():
             marks = q.get("marks", 1)
             correct_key = q.get("correct")
 
-            # Determine correctness
             is_unattempted = (user_ans is None or user_ans == "" or user_ans == [])
             is_correct = False
 
@@ -959,7 +1029,6 @@ def candidate_dashboard():
                     except (ValueError, TypeError):
                         is_correct = False
 
-            # Filter logic
             if filter_choice == "Correct Only (✔)" and not is_correct:
                 continue
             if filter_choice == "Incorrect Only (❌)" and (is_correct or is_unattempted):
@@ -967,7 +1036,6 @@ def candidate_dashboard():
             if filter_choice == "Unattempted Only (⚪)" and not is_unattempted:
                 continue
 
-            # Card Styling & Badge
             if is_unattempted:
                 box_class = "review-box review-box-skipped"
                 status_badge = "<span class='badge-unattempted'>⚪ Skipped / Unattempted (0 Marks)</span>"
@@ -984,7 +1052,6 @@ def candidate_dashboard():
 
             safe_q_text = html.escape(str(q.get("text", "")))
 
-            # Render Question Box
             st.markdown(f"""
             <div class="{box_class}">
                 <div class="question-text-content">
@@ -994,7 +1061,6 @@ def candidate_dashboard():
                 </div>
             """, unsafe_allow_html=True)
 
-            # Render MCQ / MSQ Options Review
             if q_type in ["MCQ", "MSQ"]:
                 options = q.get("options") or []
                 for opt in options:
@@ -1005,13 +1071,12 @@ def candidate_dashboard():
                     if q_type == "MCQ":
                         is_this_correct_key = (opt_str == str(correct_key).strip())
                         is_this_user_pick = (not is_unattempted and opt_str == str(user_ans).strip())
-                    else:  # MSQ
+                    else:
                         correct_list = [str(c).strip() for c in (correct_key if isinstance(correct_key, list) else [correct_key])]
                         user_list = [str(u).strip() for u in (user_ans if isinstance(user_ans, list) else [user_ans])] if not is_unattempted else []
                         is_this_correct_key = (opt_str in correct_list)
                         is_this_user_pick = (opt_str in user_list)
 
-                    # Determine row design and tags
                     if is_this_correct_key and is_this_user_pick:
                         row_class = "option-item option-correct-key"
                         status_tag = "<span style='font-size:0.8rem; font-weight:700; color:#166534;'>✔ Your Choice (Correct Key)</span>"
@@ -1032,7 +1097,6 @@ def candidate_dashboard():
                         </div>
                     """, unsafe_allow_html=True)
 
-            # Render Numerical Questions Review
             elif q_type == "Numerical":
                 unit_str = f" {html.escape(q.get('unit', ''))}" if q.get("unit") else ""
                 user_display = html.escape(str(user_ans)) if not is_unattempted else "<span style='color:#64748b;'>Not Attempted</span>"
@@ -1054,7 +1118,6 @@ def candidate_dashboard():
             st.markdown("</div>", unsafe_allow_html=True)
 
         st.divider()
-
         st.markdown("### 🏆 Branch Standing & Leaderboard")
         branch_scores = get_branch_scores(student_branch)
         if branch_scores:
@@ -1068,68 +1131,242 @@ def candidate_dashboard():
     # TAKING THE QUIZ
     # -------------------------------------------------------------
     if not my_questions:
-        st.warning(
-            f"⚠️ No examination questions are currently configured for '{student_branch}'. Please contact your supervisor.")
+        st.warning(f"⚠️ No examination questions are currently configured for '{student_branch}'. Please contact your supervisor.")
         return
+
+    # Check incoming tab-switch signal from browser query params
+    tab_param = st.query_params.get("ts_event")
+    if tab_param:
+        try:
+            current_event_id = int(tab_param)
+        except ValueError:
+            current_event_id = 1
+
+        last_seen_event = st.session_state.get("last_seen_ts_event", 0)
+        if current_event_id > last_seen_event:
+            st.session_state.last_seen_ts_event = current_event_id
+            st.session_state.tab_switch_count += 1
+
+    # Warning alert if 1 tab switch has been recorded
+    if st.session_state.tab_switch_count == 1:
+        st.markdown("""
+        <div class="warning-card">
+            <b>⚠️ PROCTORING WARNING (ATTEMPT 1/2):</b><br/>
+            You switched your browser tab or minimized the examination window! 
+            <b>Switching tabs or looking for external assistance again will immediately lock and submit your exam!</b>
+        </div>
+        """, unsafe_allow_html=True)
 
     branch_config = get_branch_settings(student_branch)
     time_limit = branch_config.get("time_limit", 30)
     time_expired = False
 
+    # Check time limit
     if time_limit > 0:
-        elapsed_seconds = int(time.time() - st.session_state.start_time)
+        elapsed_seconds = int(time.time() - (st.session_state.start_time or time.time()))
         remaining_seconds = max(0, int((time_limit * 60) - elapsed_seconds))
 
         if remaining_seconds <= 0:
             st.error("⏱️ Allocated examination time has expired. Question inputs are locked.")
             time_expired = True
+    else:
+        remaining_seconds = 999999
+
+    # REAL-TIME BROWSER PROCTORING SCRIPT (Detects Tab/Window Switching)
+    current_switches = st.session_state.tab_switch_count
+    proctor_html = f"""
+    <div style="
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+        border-radius: 14px;
+        padding: 14px 20px;
+        text-align: center;
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        color: #ffffff;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        margin-bottom: 18px;
+    ">
+        <span style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; color: #a5b4fc; font-weight: 600;">Time Remaining</span><br/>
+        <span id="quiz-countdown" style="font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.8rem; color: #38bdf8; letter-spacing: -0.02em;">--:--</span>
+    </div>
+
+    <script>
+        // --- COUNTDOWN TIMER ---
+        let remaining = {remaining_seconds};
+        const display = document.getElementById('quiz-countdown');
+
+        function formatTime(secs) {{
+            const m = Math.floor(secs / 60);
+            const s = secs % 60;
+            return (m < 10 ? '0' : '') + m + 'm ' + (s < 10 ? '0' : '') + s + 's';
+        }}
+
+        function tick() {{
+            if (remaining <= 0) {{
+                display.innerText = "00m 00s (Time Over)";
+                display.style.color = "#f87171";
+                clearInterval(timerInterval);
+                return;
+            }}
+            if (remaining <= 120) {{
+                display.style.color = "#f87171";
+            }}
+            display.innerText = formatTime(remaining);
+            remaining--;
+        }}
+
+        tick();
+        const timerInterval = setInterval(tick, 1000);
+
+        // --- TAB SWITCH / VISIBILITY PROCTORING ---
+        let count = {current_switches};
+        let isProcessing = false;
+
+        function recordViolation() {{
+            if (isProcessing) return;
+            isProcessing = true;
+            
+            // Increment violation counter
+            count++;
+            
+            if (count === 1) {{
+                // First attempt: Show immediate warning dialog and trigger re-render
+                alert("⚠️ WARNING: You switched browser tabs or windows!\\n\\nTab switching is strictly forbidden during this examination. If you switch tabs one more time, your exam will be automatically submitted immediately.");
+                
+                try {{
+                    const currentUrl = new URL(window.parent.location.href);
+                    currentUrl.searchParams.set("ts_event", Date.now().toString());
+                    window.parent.location.href = currentUrl.toString();
+                }} catch (e) {{
+                    window.location.reload();
+                }}
+            }} else if (count >= 2) {{
+                // Second attempt: Alert user and auto-submit
+                alert("🚨 EXAM VIOLATION: You switched tabs again!\\n\\nYour examination is being automatically submitted now.");
+                try {{
+                    const currentUrl = new URL(window.parent.location.href);
+                    currentUrl.searchParams.set("ts_event", Date.now().toString());
+                    currentUrl.searchParams.set("auto_submit", "true");
+                    window.parent.location.href = currentUrl.toString();
+                }} catch (e) {{
+                    window.location.reload();
+                }}
+            }}
+        }}
+
+        // Listen on parent window for tab switching and window blur
+        try {{
+            const targetDoc = window.parent.document;
+            targetDoc.addEventListener("visibilitychange", function() {{
+                if (targetDoc.hidden) {{
+                    recordViolation();
+                }}
+            }});
+
+            window.parent.addEventListener("blur", function() {{
+                // Give a short delay to distinguish real window switches
+                setTimeout(() => {{
+                    if (targetDoc.hidden) {{
+                        recordViolation();
+                    }}
+                }}, 300);
+            }});
+        }} catch(err) {{
+            document.addEventListener("visibilitychange", function() {{
+                if (document.hidden) {{
+                    recordViolation();
+                }}
+            }});
+        }}
+    </script>
+    """
+    components.html(proctor_html, height=95)
+
+    # CHECK FOR 2ND VIOLATION AUTO-SUBMIT TRIGGER
+    should_auto_submit = (
+        st.session_state.tab_switch_count >= 2 or 
+        st.query_params.get("auto_submit") == "true"
+    )
+
+    # Function to calculate and save final exam record
+    def finalize_exam(user_ans_dict, is_violation=False, is_late=False):
+        score = 0.0
+        correct_count = 0
+        wrong_count = 0
+        total_deducted = 0.0
+        saved_responses = {}
+
+        for i, q in enumerate(my_questions):
+            ans = user_ans_dict.get(i)
+            marks = q["marks"]
+            saved_responses[str(i)] = ans
+
+            if ans is None or ans == [] or ans == "":
+                continue
+
+            is_correct = False
+            if q["type"] == "MCQ":
+                is_correct = (ans == q["correct"])
+            elif q["type"] == "MSQ":
+                is_correct = set(ans) == set(q["correct"])
+            elif q["type"] == "Numerical":
+                try:
+                    is_correct = (float(ans) == float(q["correct"]))
+                except (ValueError, TypeError):
+                    is_correct = False
+
+            if is_correct:
+                score += marks
+                correct_count += 1
+            else:
+                wrong_count += 1
+                if q["type"] == "MCQ":
+                    penalty = (marks * 0.25)
+                    score -= penalty
+                    total_deducted += penalty
+
+        if is_violation:
+            status_text = "Auto-Submitted (Tab Switch Violation)"
+        elif is_late:
+            status_text = "Rejected (Late Submission)"
         else:
-            timer_html = f"""
-            <div style="
-                background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
-                border-radius: 14px;
-                padding: 14px 20px;
-                text-align: center;
-                font-family: 'Plus Jakarta Sans', sans-serif;
-                color: #ffffff;
-                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                margin-bottom: 18px;
-            ">
-                <span style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; color: #a5b4fc; font-weight: 600;">Time Remaining</span><br/>
-                <span id="quiz-countdown" style="font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.8rem; color: #38bdf8; letter-spacing: -0.02em;">--:--</span>
-            </div>
+            status_text = "Completed"
 
-            <script>
-                let remaining = {remaining_seconds};
-                const display = document.getElementById('quiz-countdown');
+        final_record = {
+            "roll_no": roll_no,
+            "name": st.session_state.student_info.get("Name", ""),
+            "section": st.session_state.student_info.get("Section", ""),
+            "branch": student_branch,
+            "score": score,
+            "correct": correct_count,
+            "wrong": wrong_count,
+            "deducted": total_deducted,
+            "responses": saved_responses,
+            "status": status_text
+        }
+        try:
+            save_student_score(final_record)
+            # Clear proctoring query params
+            if "ts_event" in st.query_params:
+                del st.query_params["ts_event"]
+            if "auto_submit" in st.query_params:
+                del st.query_params["auto_submit"]
+            time.sleep(0.6)
+            st.rerun()
+        except Exception as e:
+            st.error(f"Failed to record examination score: {e}")
 
-                function formatTime(secs) {{
-                    const m = Math.floor(secs / 60);
-                    const s = secs % 60;
-                    return (m < 10 ? '0' : '') + m + 'm ' + (s < 10 ? '0' : '') + s + 's';
-                }}
+    # IF AUTO-SUBMIT TRIGGERED FROM TAB-SWITCHING
+    if should_auto_submit:
+        st.error("🚨 Proctoring violation limit reached. Your quiz is being auto-submitted now...")
+        # Collect whatever is currently in widget keys
+        current_answers = {}
+        for i in range(len(my_questions)):
+            current_answers[i] = st.session_state.get(f"q_{i}", None)
+        finalize_exam(current_answers, is_violation=True)
+        return
 
-                function tick() {{
-                    if (remaining <= 0) {{
-                        display.innerText = "00m 00s (Time Over)";
-                        display.style.color = "#f87171";
-                        clearInterval(timerInterval);
-                        return;
-                    }}
-                    if (remaining <= 120) {{
-                        display.style.color = "#f87171";
-                    }}
-                    display.innerText = formatTime(remaining);
-                    remaining--;
-                }}
-
-                tick();
-                const timerInterval = setInterval(tick, 1000);
-            </script>
-            """
-            components.html(timer_html, height=90)
-
+    # EXAM FORM
     with st.form("quiz_form"):
         user_answers = {}
         for i, q in enumerate(my_questions):
@@ -1170,90 +1407,13 @@ def candidate_dashboard():
 
         if submit_btn:
             if time_limit > 0:
-                final_elapsed = time.time() - st.session_state.start_time
+                final_elapsed = time.time() - (st.session_state.start_time or time.time())
                 if final_elapsed > (time_limit * 60) + 10:
                     st.error("Submission rejected. The examination window elapsed.")
-                    late_record = {
-                        "roll_no": roll_no,
-                        "name": st.session_state.student_info.get("Name", ""),
-                        "section": st.session_state.student_info.get("Section", ""),
-                        "branch": student_branch,
-                        "score": 0.0,
-                        "correct": 0,
-                        "wrong": 0,
-                        "deducted": 0.0,
-                        "responses": {},
-                        "status": "Rejected (Late Submission)"
-                    }
-                    try:
-                        save_student_score(late_record)
-                    except Exception as e:
-                        st.error(f"Failed to record late submission: {e}")
-                    st.rerun()
+                    finalize_exam(user_answers, is_late=True)
                     return
 
-            score = 0.0
-            correct_count = 0
-            wrong_count = 0
-            total_deducted = 0.0
-            saved_responses = {}
-
-            for i, q in enumerate(my_questions):
-                ans = user_answers[i]
-                marks = q["marks"]
-                saved_responses[str(i)] = ans
-
-                if ans is None or ans == [] or ans == "":
-                    continue
-
-                is_correct = False
-                if q["type"] == "MCQ":
-                    is_correct = (ans == q["correct"])
-                elif q["type"] == "MSQ":
-                    is_correct = set(ans) == set(q["correct"])
-                elif q["type"] == "Numerical":
-                    try:
-                        is_correct = (float(ans) == float(q["correct"]))
-                    except ValueError:
-                        is_correct = False
-
-                if is_correct:
-                    score += marks
-                    correct_count += 1
-                else:
-                    wrong_count += 1
-                    if q["type"] == "MCQ":
-                        penalty = (marks * 0.25)
-                        score -= penalty
-                        total_deducted += penalty
-
-            final_record = {
-                "roll_no": roll_no,
-                "name": st.session_state.student_info.get("Name", ""),
-                "section": st.session_state.student_info.get("Section", ""),
-                "branch": student_branch,
-                "score": score,
-                "correct": correct_count,
-                "wrong": wrong_count,
-                "deducted": total_deducted,
-                "responses": saved_responses,
-                "status": "Completed"
-            }
-            try:
-                save_student_score(final_record)
-                st.toast("✅ Examination successfully submitted!", icon="🎉")
-                time.sleep(0.6)
-                st.rerun()
-            except Exception as e:
-                st.error(f"Failed to save score: {e}")
-
-
-def logout():
-    st.session_state.logged_in = False
-    st.session_state.user_id = ""
-    st.session_state.role = ""
-    st.session_state.student_info = {}
-    st.session_state.start_time = None
+            finalize_exam(user_answers, is_violation=False)
 
 
 # --- ROUTER ---
