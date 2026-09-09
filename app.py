@@ -4,6 +4,7 @@ import pandas as pd
 import time
 import html
 import json
+from datetime import datetime
 from supabase import create_client, Client
 
 # --- PAGE CONFIGURATION ---
@@ -79,7 +80,7 @@ st.markdown("""
         font-weight: 400;
     }
 
-    /* Modern Glassmorphic Question Card */
+    /* Question Box */
     .question-box {
         background: #ffffff;
         padding: 24px;
@@ -105,7 +106,7 @@ st.markdown("""
         line-height: 1.6;
     }
 
-    /* Warning Banner for Tab Violations */
+    /* Warning Card */
     .warning-card {
         background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
         border: 1.5px solid #ef4444;
@@ -125,9 +126,6 @@ st.markdown("""
         margin-bottom: 20px;
         border: 1px solid #e2e8f0;
         transition: transform 0.15s ease;
-    }
-    .review-box:hover {
-        transform: translateY(-1px);
     }
     .review-box-correct {
         border-left: 6px solid #10b981;
@@ -234,59 +232,12 @@ st.markdown("""
         font-weight: 600;
     }
 
-    /* Segmented Tabs Styling */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 10px;
-        background-color: #f1f5f9;
-        padding: 6px;
-        border-radius: 14px;
-        border: 1px solid #e2e8f0;
-    }
-    .stTabs [data-baseweb="tab"] {
-        background-color: transparent;
-        border-radius: 10px;
-        padding: 8px 18px;
-        color: #64748b;
-        font-weight: 600;
-        border: none !important;
-        transition: all 0.2s ease;
-    }
-    .stTabs [data-baseweb="tab"]:hover {
-        color: #1e293b;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #ffffff !important;
-        color: #4338ca !important;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+    /* Hide hidden proctoring marker field */
+    div[data-testid="stTextInput"]:has(input[aria-label="proctor_marker_input"]) {
+        display: none !important;
     }
 
-    /* Enterprise Metric Cards */
-    [data-testid="stMetric"] {
-        background: #ffffff;
-        border-radius: 16px;
-        padding: 16px 20px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        border: 1px solid #e2e8f0;
-        transition: transform 0.2s ease;
-    }
-    [data-testid="stMetric"]:hover {
-        transform: translateY(-2px);
-    }
-    [data-testid="stMetricValue"] {
-        font-family: 'Outfit', sans-serif !important;
-        font-size: 2rem !important;
-        font-weight: 700 !important;
-        color: #1e1b4b;
-    }
-    [data-testid="stMetricLabel"] {
-        font-size: 0.85rem !important;
-        font-weight: 600 !important;
-        color: #64748b !important;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-    }
-
-    /* Primary Buttons Styling */
+    /* Primary Buttons */
     .stButton > button[kind="primary"] {
         background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
         color: #ffffff !important;
@@ -301,13 +252,6 @@ st.markdown("""
     .stButton > button[kind="primary"]:hover {
         transform: translateY(-1px) !important;
         box-shadow: 0 6px 18px rgba(79, 70, 229, 0.35) !important;
-    }
-
-    /* Secondary Buttons */
-    .stButton > button {
-        border-radius: 12px !important;
-        font-weight: 600 !important;
-        transition: all 0.2s ease !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -388,7 +332,7 @@ def save_branch_settings(branch, time_limit, passkey):
 
 def get_all_scores():
     try:
-        res = supabase.table("scores").select("*").execute()
+        res = supabase.table("scores").select("*").order("score", desc=True).execute()
         return res.data or []
     except Exception as e:
         st.error(f"Error fetching scores: {e}")
@@ -449,7 +393,7 @@ def parse_saved_responses(responses_data):
 # --- PERSISTENT SESSION RESTORATION (Prevents logout on browser reload) ---
 query_params = st.query_params
 
-if "logged_in" not in st.session_state:
+if "logged_in" not in st.session_state or not st.session_state.logged_in:
     saved_role = query_params.get("session_role")
     saved_user = query_params.get("session_user")
     if saved_role == "admin" and saved_user == "admin":
@@ -476,12 +420,6 @@ if "logged_in" not in st.session_state:
 if "start_time" not in st.session_state:
     st.session_state.start_time = None
 
-if "tab_switch_count" not in st.session_state:
-    st.session_state.tab_switch_count = 0
-
-if "auto_submitted_violation" not in st.session_state:
-    st.session_state.auto_submitted_violation = False
-
 
 def logout():
     st.session_state.logged_in = False
@@ -489,8 +427,6 @@ def logout():
     st.session_state.role = ""
     st.session_state.student_info = {}
     st.session_state.start_time = None
-    st.session_state.tab_switch_count = 0
-    st.session_state.auto_submitted_violation = False
     st.query_params.clear()
 
 
@@ -547,25 +483,29 @@ def login_screen():
                             if required_passkey and student_passkey.strip() != required_passkey and not existing_score:
                                 st.error("❌ Invalid Quiz Passkey. Please verify with your instructor.")
                             else:
+                                clean_roll = rollno.strip().upper()
+                                clean_name = name.strip()
+                                clean_sec = section.strip()
+                                clean_branch = branch.strip()
+
                                 st.session_state.logged_in = True
                                 st.session_state.role = "candidate"
-                                st.session_state.user_id = rollno.strip().upper()
+                                st.session_state.user_id = clean_roll
                                 st.session_state.student_info = {
-                                    "Name": name.strip(),
-                                    "Roll No": rollno.strip().upper(),
-                                    "Section": section.strip(),
-                                    "Branch": branch.strip()
+                                    "Name": clean_name,
+                                    "Roll No": clean_roll,
+                                    "Section": clean_sec,
+                                    "Branch": clean_branch
                                 }
-                                # Save in URL params so page reload won't log out
+                                # Save session to query params so browser reload keeps student logged in
                                 st.query_params["session_role"] = "candidate"
-                                st.query_params["session_user"] = rollno.strip().upper()
-                                st.query_params["c_name"] = name.strip()
-                                st.query_params["c_section"] = section.strip()
-                                st.query_params["c_branch"] = branch.strip()
+                                st.query_params["session_user"] = clean_roll
+                                st.query_params["c_name"] = clean_name
+                                st.query_params["c_section"] = clean_sec
+                                st.query_params["c_branch"] = clean_branch
 
                                 if not existing_score:
                                     st.session_state.start_time = time.time()
-                                    st.session_state.tab_switch_count = 0
                                 st.rerun()
 
         with candidate_subtab2:
@@ -625,6 +565,7 @@ def login_screen():
                     st.session_state.logged_in = True
                     st.session_state.user_id = "admin"
                     st.session_state.role = "admin"
+                    # Preserve admin session in URL parameters
                     st.query_params["session_role"] = "admin"
                     st.query_params["session_user"] = "admin"
                     st.rerun()
@@ -634,13 +575,13 @@ def login_screen():
 
 # --- ADMIN DASHBOARD ---
 def admin_dashboard():
-    col1, col2, col3 = st.columns([3, 1, 1])
+    col1, col2, col3 = st.columns([3, 1.2, 0.8])
     with col1:
         st.markdown("<h2 style='margin:0;'>⚙️ Examination Control Center</h2>", unsafe_allow_html=True)
         st.caption("Manage questions, security passkeys, durations, and student submissions.")
     with col2:
-        if st.button("🔄 Refresh Data", use_container_width=True):
-            st.toast("Updated with latest database records.", icon="🔄")
+        if st.button("🔄 Refresh Submissions", use_container_width=True):
+            st.toast("Updated with latest database records!", icon="🔄")
             time.sleep(0.3)
             st.rerun()
     with col3:
@@ -662,12 +603,17 @@ def admin_dashboard():
 
     # 1. VIEW RESULTS & PERFORMANCE
     with tab1:
-        st.subheader("Student Submissions & Real-Time Performance")
+        now_str = datetime.now().strftime("%I:%M:%S %p")
+        c_head1, c_head2 = st.columns([3, 1])
+        with c_head1:
+            st.subheader("Student Submissions & Real-Time Analytics")
+        with c_head2:
+            st.caption(f"⏱️ Refreshed at: `{now_str}`")
 
         # Live quick metrics
         total_subs = len(scores_data)
-        avg_score = (sum(float(s["score"]) for s in scores_data) / total_subs) if total_subs > 0 else 0.0
-        active_courses = len(set([s["branch"] for s in scores_data])) if scores_data else 0
+        avg_score = (sum(float(s.get("score", 0)) for s in scores_data) / total_subs) if total_subs > 0 else 0.0
+        active_courses = len(set([s.get("branch", "") for s in scores_data])) if scores_data else 0
 
         m1, m2, m3 = st.columns(3)
         m1.metric("Total Candidates Submitted", f"{total_subs}")
@@ -677,7 +623,7 @@ def admin_dashboard():
         st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
 
         if not scores_data:
-            st.info("ℹ️ No examination records submitted yet.")
+            st.info("ℹ️ No examination records submitted yet. Click 'Refresh Submissions' above to fetch any incoming responses.")
         else:
             results_list = []
             for item in scores_data:
@@ -685,7 +631,7 @@ def admin_dashboard():
                     "Roll No": item["roll_no"],
                     "Candidate Name": item["name"],
                     "Course": item["branch"],
-                    "Final Score": float(item["score"]),
+                    "Final Score": float(item.get("score", 0)),
                     "Correct": item.get("correct", 0),
                     "Incorrect": item.get("wrong", 0),
                     "Status": item.get("status", "Completed")
@@ -964,9 +910,9 @@ def candidate_dashboard():
         if is_violation:
             st.markdown("""
                 <div class="warning-card">
-                    <div style="font-size: 1.8rem; margin-bottom: 4px;">⚠️</div>
+                    <div style="font-size: 1.8rem; margin-bottom: 4px;">🚨</div>
                     <h3 style="color: #991b1b; margin: 0 0 6px 0;">Quiz Auto-Submitted Due to Proctoring Violation</h3>
-                    <p style="margin: 0; font-size: 0.95rem;">You switched browser tabs or windows more than once during the examination. Your assessment was locked and automatically submitted.</p>
+                    <p style="margin: 0; font-size: 0.95rem;">You switched browser tabs or minimized the examination window multiple times. In accordance with examination regulations, your assessment was immediately locked and submitted.</p>
                 </div>
             """, unsafe_allow_html=True)
         else:
@@ -1134,34 +1080,10 @@ def candidate_dashboard():
         st.warning(f"⚠️ No examination questions are currently configured for '{student_branch}'. Please contact your supervisor.")
         return
 
-    # Check incoming tab-switch signal from browser query params
-    tab_param = st.query_params.get("ts_event")
-    if tab_param:
-        try:
-            current_event_id = int(tab_param)
-        except ValueError:
-            current_event_id = 1
-
-        last_seen_event = st.session_state.get("last_seen_ts_event", 0)
-        if current_event_id > last_seen_event:
-            st.session_state.last_seen_ts_event = current_event_id
-            st.session_state.tab_switch_count += 1
-
-    # Warning alert if 1 tab switch has been recorded
-    if st.session_state.tab_switch_count == 1:
-        st.markdown("""
-        <div class="warning-card">
-            <b>⚠️ PROCTORING WARNING (ATTEMPT 1/2):</b><br/>
-            You switched your browser tab or minimized the examination window! 
-            <b>Switching tabs or looking for external assistance again will immediately lock and submit your exam!</b>
-        </div>
-        """, unsafe_allow_html=True)
-
     branch_config = get_branch_settings(student_branch)
     time_limit = branch_config.get("time_limit", 30)
     time_expired = False
 
-    # Check time limit
     if time_limit > 0:
         elapsed_seconds = int(time.time() - (st.session_state.start_time or time.time()))
         remaining_seconds = max(0, int((time_limit * 60) - elapsed_seconds))
@@ -1172,9 +1094,16 @@ def candidate_dashboard():
     else:
         remaining_seconds = 999999
 
-    # REAL-TIME BROWSER PROCTORING SCRIPT (Detects Tab/Window Switching)
-    current_switches = st.session_state.tab_switch_count
-    proctor_html = f"""
+    # ESCAPED STRINGS FOR JAVASCRIPT
+    js_roll_no = json.dumps(roll_no)
+    js_name = json.dumps(st.session_state.student_info.get("Name", ""))
+    js_section = json.dumps(st.session_state.student_info.get("Section", ""))
+    js_branch = json.dumps(student_branch)
+    js_supabase_url = json.dumps(SUPABASE_URL)
+    js_supabase_key = json.dumps(SUPABASE_KEY)
+
+    # ADVANCED PROCTORING COMPONENT
+    proctor_component_code = f"""
     <div style="
         background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
         border-radius: 14px;
@@ -1184,14 +1113,37 @@ def candidate_dashboard():
         color: #ffffff;
         box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
         border: 1px solid rgba(255, 255, 255, 0.1);
-        margin-bottom: 18px;
+        margin-bottom: 12px;
     ">
-        <span style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; color: #a5b4fc; font-weight: 600;">Time Remaining</span><br/>
-        <span id="quiz-countdown" style="font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.8rem; color: #38bdf8; letter-spacing: -0.02em;">--:--</span>
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+            <div>
+                <span style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: #a5b4fc; font-weight: 600;">Time Remaining</span><br/>
+                <span id="quiz-countdown" style="font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.7rem; color: #38bdf8; letter-spacing: -0.02em;">--:--</span>
+            </div>
+            <div id="proctor-badge" style="
+                background: #eef2ff;
+                color: #4338ca;
+                padding: 6px 14px;
+                border-radius: 9999px;
+                font-size: 0.78rem;
+                font-weight: 700;
+                border: 1px solid #c7d2fe;
+                transition: all 0.3s ease;
+            ">
+                🟢 Proctoring Shield Active • 0 Violations
+            </div>
+        </div>
     </div>
 
     <script>
-        // --- COUNTDOWN TIMER ---
+        const rollNo = {js_roll_no};
+        const studentName = {js_name};
+        const studentSection = {js_section};
+        const studentBranch = {js_branch};
+        const supabaseUrl = {js_supabase_url};
+        const supabaseKey = {js_supabase_key};
+
+        // 1. COUNTDOWN TIMER
         let remaining = {remaining_seconds};
         const display = document.getElementById('quiz-countdown');
 
@@ -1214,81 +1166,236 @@ def candidate_dashboard():
             display.innerText = formatTime(remaining);
             remaining--;
         }}
-
         tick();
         const timerInterval = setInterval(tick, 1000);
 
-        // --- TAB SWITCH / VISIBILITY PROCTORING ---
-        let count = {current_switches};
-        let isProcessing = false;
+        // 2. REAL-TIME PROCTORING ENGINE
+        const strikeKey = "quiz_strikes_" + rollNo;
+        let strikes = parseInt(sessionStorage.getItem(strikeKey) || "0", 10);
+        let isAway = false;
+        let leaveTimestamp = 0;
 
-        function recordViolation() {{
-            if (isProcessing) return;
-            isProcessing = true;
+        function updateProctorBadge() {{
+            const badge = document.getElementById("proctor-badge");
+            if (!badge) return;
+            if (strikes === 0) {{
+                badge.innerHTML = "🟢 Proctoring Shield Active • 0 Violations";
+                badge.style.background = "#eef2ff";
+                badge.style.color = "#4338ca";
+                badge.style.borderColor = "#c7d2fe";
+            }} else if (strikes === 1) {{
+                badge.innerHTML = "⚠️ Strike 1/2 Recorded • Next Switch = Auto-Submit";
+                badge.style.background = "#fee2e2";
+                badge.style.color = "#991b1b";
+                badge.style.borderColor = "#f87171";
+            }} else {{
+                badge.innerHTML = "🚨 Strike 2/2 • Auto-Submitting Exam...";
+                badge.style.background = "#991b1b";
+                badge.style.color = "#ffffff";
+                badge.style.borderColor = "#7f1d1d";
+            }}
+        }}
+        updateProctorBadge();
+
+        function playAlertTone() {{
+            try {{
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = "sawtooth";
+                osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+                osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.45);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.45);
+            }} catch(e) {{}}
+        }}
+
+        function showWarningModal(awayDuration) {{
+            playAlertTone();
+            const targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
             
-            // Increment violation counter
-            count++;
+            const existing = targetDoc.getElementById("proctor-warning-modal-overlay");
+            if (existing) existing.remove();
+
+            const overlay = targetDoc.createElement("div");
+            overlay.id = "proctor-warning-modal-overlay";
+            overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.85); backdrop-filter:blur(8px); z-index:99999999; display:flex; align-items:center; justify-content:center; font-family:'Plus Jakarta Sans', sans-serif;";
             
-            if (count === 1) {{
-                // First attempt: Show immediate warning dialog and trigger re-render
-                alert("⚠️ WARNING: You switched browser tabs or windows!\\n\\nTab switching is strictly forbidden during this examination. If you switch tabs one more time, your exam will be automatically submitted immediately.");
-                
-                try {{
-                    const currentUrl = new URL(window.parent.location.href);
-                    currentUrl.searchParams.set("ts_event", Date.now().toString());
-                    window.parent.location.href = currentUrl.toString();
-                }} catch (e) {{
-                    window.location.reload();
+            overlay.innerHTML = '<div style="background:#ffffff; border-radius:20px; max-width:520px; width:90%; padding:32px 28px; text-align:center; box-shadow:0 25px 50px -12px rgba(220,38,38,0.35); border:2px solid #ef4444;">' +
+                '<div style="font-size:3.2rem; line-height:1; margin-bottom:10px;">⚠️</div>' +
+                '<h2 style="color:#991b1b; font-size:1.55rem; font-weight:800; margin:0 0 10px 0;">PROCTORING VIOLATION DETECTED</h2>' +
+                '<div style="background:#fef2f2; border:1px solid #fecaca; border-radius:12px; padding:10px 16px; color:#b91c1c; font-weight:700; font-size:0.92rem; margin-bottom:14px;">' +
+                    'Strike 1 of 2 Recorded • Left Window for ' + awayDuration + 's' +
+                '</div>' +
+                '<p style="color:#475569; font-size:0.95rem; line-height:1.6; margin-bottom:22px;">' +
+                    'You switched tabs or navigated away from the examination window. Navigating to Google, AI chatbots, or external applications is strictly monitored.' +
+                    '<br/><br/><b style="color:#dc2626;">This is your final warning. If you leave or switch tabs one more time, your exam will be locked and automatically submitted immediately.</b>' +
+                '</p>' +
+                '<button id="ack-warning-btn" style="background:linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); color:#ffffff; border:none; padding:13px 26px; font-size:1rem; font-weight:700; border-radius:12px; cursor:pointer; width:100%; box-shadow:0 4px 14px rgba(220,38,38,0.3);">' +
+                    'I Understand & Acknowledge (Return to Quiz)' +
+                '</button>' +
+            '</div>';
+
+            targetDoc.body.appendChild(overlay);
+
+            const ackBtn = targetDoc.getElementById("ack-warning-btn");
+            if (ackBtn) {{
+                ackBtn.onclick = function() {{
+                    overlay.remove();
+                }};
+            }}
+        }}
+
+        function autoSubmitExam() {{
+            const targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+            
+            const existingWarn = targetDoc.getElementById("proctor-warning-modal-overlay");
+            if (existingWarn) existingWarn.remove();
+
+            const lockOverlay = targetDoc.createElement("div");
+            lockOverlay.id = "proctor-lock-overlay";
+            lockOverlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.92); backdrop-filter:blur(10px); z-index:99999999; display:flex; align-items:center; justify-content:center; font-family:'Plus Jakarta Sans', sans-serif;";
+            
+            lockOverlay.innerHTML = '<div style="background:#ffffff; border-radius:20px; max-width:500px; width:90%; padding:36px 28px; text-align:center; box-shadow:0 25px 50px -12px rgba(220,38,38,0.4); border:2px solid #ef4444;">' +
+                '<div style="font-size:3.5rem; line-height:1; margin-bottom:12px;">🚨</div>' +
+                '<h2 style="color:#991b1b; font-size:1.6rem; font-weight:800; margin:0 0 10px 0;">EXAMINATION TERMINATED</h2>' +
+                '<div style="background:#fee2e2; border:1px solid #fca5a5; border-radius:12px; padding:10px 16px; color:#991b1b; font-weight:700; font-size:0.92rem; margin-bottom:16px;">' +
+                    'Proctoring Limit Exceeded (Strike 2 of 2)' +
+                '</div>' +
+                '<p style="color:#475569; font-size:0.95rem; line-height:1.6; margin-bottom:20px;">' +
+                    'You switched tabs again after receiving a warning. Your examination has been automatically locked and submitted.' +
+                '</p>' +
+                '<div style="color:#64748b; font-size:0.85rem; font-weight:600;">Submitting your score to instructor database...</div>' +
+            '</div>';
+            targetDoc.body.appendChild(lockOverlay);
+
+            // Set marker in hidden input to alert Python backend
+            try {{
+                const markerInput = targetDoc.querySelector('input[aria-label="proctor_marker_input"]');
+                if (markerInput) {{
+                    markerInput.value = "TAB_SWITCH_VIOLATION";
+                    markerInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
                 }}
-            }} else if (count >= 2) {{
-                // Second attempt: Alert user and auto-submit
-                alert("🚨 EXAM VIOLATION: You switched tabs again!\\n\\nYour examination is being automatically submitted now.");
+            }} catch(e) {{}}
+
+            // 1. Submit through Streamlit by clicking form submit button
+            setTimeout(() => {{
+                let clicked = false;
                 try {{
-                    const currentUrl = new URL(window.parent.location.href);
-                    currentUrl.searchParams.set("ts_event", Date.now().toString());
-                    currentUrl.searchParams.set("auto_submit", "true");
-                    window.parent.location.href = currentUrl.toString();
-                }} catch (e) {{
-                    window.location.reload();
+                    const buttons = targetDoc.querySelectorAll('button');
+                    for (let b of buttons) {{
+                        if (b.innerText.includes("Finalize & Submit") || b.innerText.includes("Submit Examination")) {{
+                            b.click();
+                            clicked = true;
+                            break;
+                        }}
+                    }}
+                    if (!clicked) {{
+                        const primaryBtn = targetDoc.querySelector('button[kind="primary"]');
+                        if (primaryBtn) primaryBtn.click();
+                    }}
+                }} catch(e) {{}}
+
+                // 2. Direct Supabase fail-safe
+                setTimeout(() => {{
+                    fetch(supabaseUrl + "/rest/v1/scores", {{
+                        method: "POST",
+                        headers: {{
+                            "apikey": supabaseKey,
+                            "Authorization": "Bearer " + supabaseKey,
+                            "Content-Type": "application/json",
+                            "Prefer": "resolution=merge-duplicates"
+                        }},
+                        body: JSON.stringify({{
+                            roll_no: rollNo,
+                            name: studentName,
+                            section: studentSection,
+                            branch: studentBranch,
+                            score: 0.0,
+                            correct: 0,
+                            wrong: 0,
+                            deducted: 0.0,
+                            status: "Auto-Submitted (Tab Switch Violation)"
+                        }})
+                    }}).finally(() => {{
+                        try {{
+                            window.parent.location.reload();
+                        }} catch(e) {{
+                            window.location.reload();
+                        }}
+                    }});
+                }}, 1200);
+            }}, 500);
+        }}
+
+        function handleTabDeparture() {{
+            if (!isAway) {{
+                isAway = true;
+                leaveTimestamp = Date.now();
+                
+                // If they already had 1 strike and left again -> instant lock
+                if (strikes >= 1) {{
+                    strikes = 2;
+                    sessionStorage.setItem(strikeKey, "2");
+                    updateProctorBadge();
+                    autoSubmitExam();
                 }}
             }}
         }}
 
-        // Listen on parent window for tab switching and window blur
-        try {{
-            const targetDoc = window.parent.document;
-            targetDoc.addEventListener("visibilitychange", function() {{
-                if (targetDoc.hidden) {{
-                    recordViolation();
+        function handleTabReturn() {{
+            if (isAway) {{
+                isAway = false;
+                const awaySecs = Math.max(1, Math.round((Date.now() - leaveTimestamp) / 1000));
+                
+                if (strikes === 0) {{
+                    strikes = 1;
+                    sessionStorage.setItem(strikeKey, "1");
+                    updateProctorBadge();
+                    showWarningModal(awaySecs);
+                }} else if (strikes >= 2) {{
+                    autoSubmitExam();
                 }}
-            }});
-
-            window.parent.addEventListener("blur", function() {{
-                // Give a short delay to distinguish real window switches
-                setTimeout(() => {{
-                    if (targetDoc.hidden) {{
-                        recordViolation();
-                    }}
-                }}, 300);
-            }});
-        }} catch(err) {{
-            document.addEventListener("visibilitychange", function() {{
-                if (document.hidden) {{
-                    recordViolation();
-                }}
-            }});
+            }}
         }}
+
+        // Listen for visibility and window changes
+        document.addEventListener("visibilitychange", function() {{
+            if (document.hidden) {{
+                handleTabDeparture();
+            }} else {{
+                handleTabReturn();
+            }}
+        }});
+
+        try {{
+            if (window.parent && window.parent.document) {{
+                window.parent.document.addEventListener("visibilitychange", function() {{
+                    if (window.parent.document.hidden) {{
+                        handleTabDeparture();
+                    }} else {{
+                        handleTabReturn();
+                    }}
+                }});
+                
+                window.parent.addEventListener("blur", function() {{
+                    setTimeout(() => {{
+                        if (window.parent && window.parent.document && window.parent.document.hidden) {{
+                            handleTabDeparture();
+                        }}
+                    }}, 350);
+                }});
+            }}
+        }} catch(e) {{}}
     </script>
     """
-    components.html(proctor_html, height=95)
+    components.html(proctor_component_code, height=100)
 
-    # CHECK FOR 2ND VIOLATION AUTO-SUBMIT TRIGGER
-    should_auto_submit = (
-        st.session_state.tab_switch_count >= 2 or 
-        st.query_params.get("auto_submit") == "true"
-    )
-
-    # Function to calculate and save final exam record
+    # Function to grade and finalize submission in Supabase
     def finalize_exam(user_ans_dict, is_violation=False, is_late=False):
         score = 0.0
         correct_count = 0
@@ -1346,28 +1453,21 @@ def candidate_dashboard():
         }
         try:
             save_student_score(final_record)
-            # Clear proctoring query params
-            if "ts_event" in st.query_params:
-                del st.query_params["ts_event"]
-            if "auto_submit" in st.query_params:
-                del st.query_params["auto_submit"]
             time.sleep(0.6)
             st.rerun()
         except Exception as e:
             st.error(f"Failed to record examination score: {e}")
 
-    # IF AUTO-SUBMIT TRIGGERED FROM TAB-SWITCHING
-    if should_auto_submit:
-        st.error("🚨 Proctoring violation limit reached. Your quiz is being auto-submitted now...")
-        # Collect whatever is currently in widget keys
-        current_answers = {}
-        for i in range(len(my_questions)):
-            current_answers[i] = st.session_state.get(f"q_{i}", None)
-        finalize_exam(current_answers, is_violation=True)
-        return
-
     # EXAM FORM
     with st.form("quiz_form"):
+        # Hidden input that JavaScript populates if 2nd tab switch occurs
+        proctor_marker = st.text_input(
+            "proctor_marker_input", 
+            value="NORMAL", 
+            key="proctor_marker_input", 
+            label_visibility="collapsed"
+        )
+
         user_answers = {}
         for i, q in enumerate(my_questions):
             safe_text = html.escape(q['text'])
@@ -1406,14 +1506,19 @@ def candidate_dashboard():
                                            use_container_width=True)
 
         if submit_btn:
-            if time_limit > 0:
+            is_tab_violation = (st.session_state.get("proctor_marker_input") == "TAB_SWITCH_VIOLATION")
+
+            if time_limit > 0 and not is_tab_violation:
                 final_elapsed = time.time() - (st.session_state.start_time or time.time())
                 if final_elapsed > (time_limit * 60) + 10:
                     st.error("Submission rejected. The examination window elapsed.")
                     finalize_exam(user_answers, is_late=True)
                     return
 
-            finalize_exam(user_answers, is_violation=False)
+            finalize_exam(user_answers, is_vi_exam(user_answers, is_late=True)
+                    return
+
+            finalize_exam(user_answers, is_violation=is_tab_violation)
 
 
 # --- ROUTER ---
