@@ -248,6 +248,11 @@ st.markdown("""
         transform: translateY(-1px) !important;
         box-shadow: 0 6px 18px rgba(79, 70, 229, 0.35) !important;
     }
+
+    /* Hide the automatic violation submit button completely from student view */
+    div[data-testid="stForm"] div[data-testid="stFormSubmitButton"]:nth-of-type(2) {
+        display: none !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -894,78 +899,6 @@ def candidate_dashboard():
     st.write("---")
 
     my_questions = get_questions_by_branch(student_branch)
-
-    # -------------------------------------------------------------
-    # INSTANT PROCTORING AUTO-SUBMIT HANDLER (Triggered from 2nd tab switch)
-    # -------------------------------------------------------------
-    if st.query_params.get("auto_submitted_violation") == "true":
-        raw_ans_payload = st.query_params.get("ans_payload", "")
-        extracted_responses = {}
-        if raw_ans_payload:
-            try:
-                extracted_responses = json.loads(raw_ans_payload)
-            except Exception:
-                extracted_responses = {}
-
-        # Grade any answered items up to the violation
-        score = 0.0
-        correct_count = 0
-        wrong_count = 0
-        total_deducted = 0.0
-
-        for i, q in enumerate(my_questions):
-            ans = extracted_responses.get(str(i))
-            marks = q.get("marks", 1)
-            if ans is None or ans == "" or ans == []:
-                continue
-
-            is_correct = False
-            if q["type"] == "MCQ":
-                is_correct = (ans == q["correct"])
-            elif q["type"] == "MSQ":
-                correct_set = set(q["correct"]) if isinstance(q["correct"], list) else {q["correct"]}
-                ans_set = set(ans) if isinstance(ans, list) else {ans}
-                is_correct = (ans_set == correct_set)
-            elif q["type"] == "Numerical":
-                try:
-                    is_correct = (float(ans) == float(q["correct"]))
-                except (ValueError, TypeError):
-                    is_correct = False
-
-            if is_correct:
-                score += marks
-                correct_count += 1
-            else:
-                wrong_count += 1
-                if q["type"] == "MCQ":
-                    penalty = (marks * 0.25)
-                    score -= penalty
-                    total_deducted += penalty
-
-        violation_record = {
-            "roll_no": roll_no,
-            "name": st.session_state.student_info.get("Name", ""),
-            "section": st.session_state.student_info.get("Section", ""),
-            "branch": student_branch,
-            "score": score,
-            "correct": correct_count,
-            "wrong": wrong_count,
-            "deducted": total_deducted,
-            "responses": extracted_responses,
-            "status": "Auto-Submitted (Tab Switch Violation)"
-        }
-        try:
-            save_student_score(violation_record)
-        except Exception as e:
-            st.error(f"Failed to save record: {e}")
-
-        # Clean URL parameters and rerun immediately
-        if "auto_submitted_violation" in st.query_params:
-            del st.query_params["auto_submitted_violation"]
-        if "ans_payload" in st.query_params:
-            del st.query_params["ans_payload"]
-        st.rerun()
-
     student_record = get_student_score(roll_no)
 
     # -------------------------------------------------------------
@@ -980,7 +913,7 @@ def candidate_dashboard():
                     <div style="font-size: 2rem; margin-bottom: 4px;">🚨</div>
                     <h3 style="color: #991b1b; margin: 0 0 6px 0;">Quiz Auto-Submitted Due to Proctoring Violation</h3>
                     <p style="margin: 0; font-size: 0.95rem; line-height: 1.5;">
-                        <b>Cheating Prevention Triggered:</b> You switched browser tabs or minimized the examination window after being warned. 
+                        <b>Cheating Prevention Triggered:</b> You switched browser tabs or minimized the examination window after receiving your warning. 
                         Your quiz was locked and automatically submitted to the instructor database.
                     </p>
                 </div>
@@ -1161,6 +1094,11 @@ def candidate_dashboard():
         remaining_seconds = 999999
 
     js_roll_no = json.dumps(roll_no)
+    js_name = json.dumps(st.session_state.student_info.get("Name", ""))
+    js_section = json.dumps(st.session_state.student_info.get("Section", ""))
+    js_branch = json.dumps(student_branch)
+    js_supabase_url = json.dumps(SUPABASE_URL)
+    js_supabase_key = json.dumps(SUPABASE_KEY)
 
     # ADVANCED INSTANT PROCTORING COMPONENT
     proctor_component_code = f"""
@@ -1197,6 +1135,11 @@ def candidate_dashboard():
 
     <script>
         const rollNo = {js_roll_no};
+        const studentName = {js_name};
+        const studentSection = {js_section};
+        const studentBranch = {js_branch};
+        const supabaseUrl = {js_supabase_url};
+        const supabaseKey = {js_supabase_key};
 
         // 1. COUNTDOWN TIMER
         let remaining = {remaining_seconds};
@@ -1330,39 +1273,46 @@ def candidate_dashboard():
             '</div>';
             targetDoc.body.appendChild(lockOverlay);
 
-            // Extract candidate answers so far
-            let gatheredAnswers = {{}};
+            // 1. Immediately click the dedicated violation submit button inside the Streamlit form!
             try {{
-                // Radio buttons (MCQ)
-                const radioGroups = targetDoc.querySelectorAll('[data-testid="stRadio"]');
-                radioGroups.forEach((grp, idx) => {{
-                    const checked = grp.querySelector('input[type="radio"]:checked');
-                    if (checked) {{
-                        gatheredAnswers[idx] = checked.value;
+                const allButtons = targetDoc.querySelectorAll('button');
+                for (let b of allButtons) {{
+                    if (b.innerText && b.innerText.includes("PROCTOR_VIOLATION_AUTO_SUBMIT")) {{
+                        b.click();
+                        return;
                     }}
-                }});
-                // Text inputs (Numerical)
-                const textInputs = targetDoc.querySelectorAll('[data-testid="stTextInput"] input');
-                textInputs.forEach((inp, idx) => {{
-                    if (inp.value && inp.getAttribute('aria-label') !== 'proctor_marker_input') {{
-                        gatheredAnswers[idx] = inp.value;
-                    }}
-                }});
+                }}
             }} catch(err) {{}}
 
-            // Redirect parent immediately with violation parameter
+            // 2. Direct Supabase backup if button wasn't found
             try {{
-                const targetUrl = new URL(window.parent.location.href);
-                targetUrl.searchParams.set("auto_submitted_violation", "true");
-                if (Object.keys(gatheredAnswers).length > 0) {{
-                    targetUrl.searchParams.set("ans_payload", JSON.stringify(gatheredAnswers));
-                }}
-                window.parent.location.href = targetUrl.toString();
-            }} catch(e) {{
-                const localUrl = new URL(window.location.href);
-                localUrl.searchParams.set("auto_submitted_violation", "true");
-                window.location.href = localUrl.toString();
-            }}
+                fetch(supabaseUrl + "/rest/v1/scores", {{
+                    method: "POST",
+                    headers: {{
+                        "apikey": supabaseKey,
+                        "Authorization": "Bearer " + supabaseKey,
+                        "Content-Type": "application/json",
+                        "Prefer": "resolution=merge-duplicates"
+                    }},
+                    body: JSON.stringify({{
+                        roll_no: rollNo,
+                        name: studentName,
+                        section: studentSection,
+                        branch: studentBranch,
+                        score: 0.0,
+                        correct: 0,
+                        wrong: 0,
+                        deducted: 0.0,
+                        status: "Auto-Submitted (Tab Switch Violation)"
+                    }})
+                }}).finally(() => {{
+                    try {{
+                        window.parent.location.reload();
+                    }} catch(e) {{
+                        window.location.reload();
+                    }}
+                }});
+            }} catch(e) {{}}
         }}
 
         function handleTabDeparture() {{
@@ -1428,8 +1378,8 @@ def candidate_dashboard():
     """
     components.html(proctor_component_code, height=100)
 
-    # Standard Exam Form Submission
-    def finalize_normal_exam(user_ans_dict, is_late=False):
+    # Function to grade and finalize submission in Supabase
+    def finalize_exam(user_ans_dict, is_violation=False, is_late=False):
         score = 0.0
         correct_count = 0
         wrong_count = 0
@@ -1467,6 +1417,13 @@ def candidate_dashboard():
                     score -= penalty
                     total_deducted += penalty
 
+        if is_violation:
+            status_text = "Auto-Submitted (Tab Switch Violation)"
+        elif is_late:
+            status_text = "Rejected (Late Submission)"
+        else:
+            status_text = "Completed"
+
         final_record = {
             "roll_no": roll_no,
             "name": st.session_state.student_info.get("Name", ""),
@@ -1477,11 +1434,11 @@ def candidate_dashboard():
             "wrong": wrong_count,
             "deducted": total_deducted,
             "responses": saved_responses,
-            "status": "Rejected (Late Submission)" if is_late else "Completed"
+            "status": status_text
         }
         try:
             save_student_score(final_record)
-            time.sleep(0.4)
+            time.sleep(0.3)
             st.rerun()
         except Exception as e:
             st.error(f"Failed to record examination score: {e}")
@@ -1524,16 +1481,20 @@ def candidate_dashboard():
         st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
         submit_btn = st.form_submit_button("✅ Finalize & Submit Examination", type="primary", disabled=time_expired,
                                            use_container_width=True)
+        # Dedicated violation submit button (hidden with CSS)
+        violation_btn = st.form_submit_button("PROCTOR_VIOLATION_AUTO_SUBMIT", type="secondary")
 
-        if submit_btn:
+        if violation_btn:
+            finalize_exam(user_answers, is_violation=True)
+        elif submit_btn:
             if time_limit > 0:
                 final_elapsed = time.time() - (st.session_state.start_time or time.time())
                 if final_elapsed > (time_limit * 60) + 10:
                     st.error("Submission rejected. The examination window elapsed.")
-                    finalize_normal_exam(user_answers, is_late=True)
+                    finalize_exam(user_answers, is_late=True)
                     return
 
-            finalize_normal_exam(user_answers, is_late=False)
+            finalize_exam(user_answers, is_violation=False)
 
 
 # --- ROUTER ---
@@ -1544,3 +1505,4 @@ else:
         admin_dashboard()
     else:
         candidate_dashboard()
+    
