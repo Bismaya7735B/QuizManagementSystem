@@ -232,6 +232,11 @@ st.markdown("""
         font-weight: 600;
     }
 
+    /* Hide hidden proctoring marker field */
+    div[data-testid="stTextInput"]:has(input[aria-label="proctor_marker_input"]) {
+        display: none !important;
+    }
+
     /* Primary Buttons */
     .stButton > button[kind="primary"] {
         background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
@@ -247,11 +252,6 @@ st.markdown("""
     .stButton > button[kind="primary"]:hover {
         transform: translateY(-1px) !important;
         box-shadow: 0 6px 18px rgba(79, 70, 229, 0.35) !important;
-    }
-
-    /* Hide the automatic violation submit button completely from student view */
-    div[data-testid="stForm"] div[data-testid="stFormSubmitButton"]:nth-of-type(2) {
-        display: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -905,17 +905,14 @@ def candidate_dashboard():
     # IF QUIZ ALREADY SUBMITTED: SHOW RESULT SCREEN & FULL REVIEW
     # -------------------------------------------------------------
     if student_record is not None:
-        is_violation = ("Tab Switch" in str(student_record.get("status", "")))
+        is_violation = ("Tab Switch" in student_record.get("status", ""))
 
         if is_violation:
             st.markdown("""
                 <div class="warning-card">
-                    <div style="font-size: 2rem; margin-bottom: 4px;">🚨</div>
+                    <div style="font-size: 1.8rem; margin-bottom: 4px;">🚨</div>
                     <h3 style="color: #991b1b; margin: 0 0 6px 0;">Quiz Auto-Submitted Due to Proctoring Violation</h3>
-                    <p style="margin: 0; font-size: 0.95rem; line-height: 1.5;">
-                        <b>Cheating Prevention Triggered:</b> You switched browser tabs or minimized the examination window after receiving your warning. 
-                        Your quiz was locked and automatically submitted to the instructor database.
-                    </p>
+                    <p style="margin: 0; font-size: 0.95rem;">You switched browser tabs or minimized the examination window multiple times. In accordance with examination regulations, your assessment was immediately locked and submitted.</p>
                 </div>
             """, unsafe_allow_html=True)
         else:
@@ -1079,6 +1076,10 @@ def candidate_dashboard():
     # -------------------------------------------------------------
     # TAKING THE QUIZ
     # -------------------------------------------------------------
+    if not my_questions:
+        st.warning(f"⚠️ No examination questions are currently configured for '{student_branch}'. Please contact your supervisor.")
+        return
+
     branch_config = get_branch_settings(student_branch)
     time_limit = branch_config.get("time_limit", 30)
     time_expired = False
@@ -1093,6 +1094,7 @@ def candidate_dashboard():
     else:
         remaining_seconds = 999999
 
+    # ESCAPED STRINGS FOR JAVASCRIPT
     js_roll_no = json.dumps(roll_no)
     js_name = json.dumps(st.session_state.student_info.get("Name", ""))
     js_section = json.dumps(st.session_state.student_info.get("Section", ""))
@@ -1100,7 +1102,7 @@ def candidate_dashboard():
     js_supabase_url = json.dumps(SUPABASE_URL)
     js_supabase_key = json.dumps(SUPABASE_KEY)
 
-    # ADVANCED INSTANT PROCTORING COMPONENT
+    # ADVANCED PROCTORING COMPONENT
     proctor_component_code = f"""
     <div style="
         background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
@@ -1167,7 +1169,7 @@ def candidate_dashboard():
         tick();
         const timerInterval = setInterval(tick, 1000);
 
-        // 2. REAL-TIME INSTANT PROCTORING ENGINE
+        // 2. REAL-TIME PROCTORING ENGINE
         const strikeKey = "quiz_strikes_" + rollNo;
         let strikes = parseInt(sessionStorage.getItem(strikeKey) || "0", 10);
         let isAway = false;
@@ -1203,7 +1205,7 @@ def candidate_dashboard():
                 osc.type = "sawtooth";
                 osc.frequency.setValueAtTime(440, audioCtx.currentTime);
                 osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.15);
-                gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.45);
                 osc.connect(gain);
                 gain.connect(audioCtx.destination);
@@ -1230,7 +1232,7 @@ def candidate_dashboard():
                     'Strike 1 of 2 Recorded • Left Window for ' + awayDuration + 's' +
                 '</div>' +
                 '<p style="color:#475569; font-size:0.95rem; line-height:1.6; margin-bottom:22px;">' +
-                    'You switched tabs or navigated away from the examination window. Navigating to Google, AI chatbots, or external applications is strictly prohibited.' +
+                    'You switched tabs or navigated away from the examination window. Navigating to Google, AI chatbots, or external applications is strictly monitored.' +
                     '<br/><br/><b style="color:#dc2626;">This is your final warning. If you leave or switch tabs one more time, your exam will be locked and automatically submitted immediately.</b>' +
                 '</p>' +
                 '<button id="ack-warning-btn" style="background:linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); color:#ffffff; border:none; padding:13px 26px; font-size:1rem; font-weight:700; border-radius:12px; cursor:pointer; width:100%; box-shadow:0 4px 14px rgba(220,38,38,0.3);">' +
@@ -1248,14 +1250,12 @@ def candidate_dashboard():
             }}
         }}
 
-        function executeInstantAutoSubmit() {{
+        function autoSubmitExam() {{
             const targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
             
-            // Clean up any warning modal
             const existingWarn = targetDoc.getElementById("proctor-warning-modal-overlay");
             if (existingWarn) existingWarn.remove();
 
-            // Instant full-screen lock
             const lockOverlay = targetDoc.createElement("div");
             lockOverlay.id = "proctor-lock-overlay";
             lockOverlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.92); backdrop-filter:blur(10px); z-index:99999999; display:flex; align-items:center; justify-content:center; font-family:'Plus Jakarta Sans', sans-serif;";
@@ -1269,50 +1269,67 @@ def candidate_dashboard():
                 '<p style="color:#475569; font-size:0.95rem; line-height:1.6; margin-bottom:20px;">' +
                     'You switched tabs again after receiving a warning. Your examination has been automatically locked and submitted.' +
                 '</p>' +
-                '<div style="color:#64748b; font-size:0.85rem; font-weight:600;">Processing submission...</div>' +
+                '<div style="color:#64748b; font-size:0.85rem; font-weight:600;">Submitting your score to instructor database...</div>' +
             '</div>';
             targetDoc.body.appendChild(lockOverlay);
 
-            // 1. Immediately click the dedicated violation submit button inside the Streamlit form!
+            // Set marker in hidden input to alert Python backend
             try {{
-                const allButtons = targetDoc.querySelectorAll('button');
-                for (let b of allButtons) {{
-                    if (b.innerText && b.innerText.includes("PROCTOR_VIOLATION_AUTO_SUBMIT")) {{
-                        b.click();
-                        return;
-                    }}
+                const markerInput = targetDoc.querySelector('input[aria-label="proctor_marker_input"]');
+                if (markerInput) {{
+                    markerInput.value = "TAB_SWITCH_VIOLATION";
+                    markerInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
                 }}
-            }} catch(err) {{}}
-
-            // 2. Direct Supabase backup if button wasn't found
-            try {{
-                fetch(supabaseUrl + "/rest/v1/scores", {{
-                    method: "POST",
-                    headers: {{
-                        "apikey": supabaseKey,
-                        "Authorization": "Bearer " + supabaseKey,
-                        "Content-Type": "application/json",
-                        "Prefer": "resolution=merge-duplicates"
-                    }},
-                    body: JSON.stringify({{
-                        roll_no: rollNo,
-                        name: studentName,
-                        section: studentSection,
-                        branch: studentBranch,
-                        score: 0.0,
-                        correct: 0,
-                        wrong: 0,
-                        deducted: 0.0,
-                        status: "Auto-Submitted (Tab Switch Violation)"
-                    }})
-                }}).finally(() => {{
-                    try {{
-                        window.parent.location.reload();
-                    }} catch(e) {{
-                        window.location.reload();
-                    }}
-                }});
             }} catch(e) {{}}
+
+            // 1. Submit through Streamlit by clicking form submit button
+            setTimeout(() => {{
+                let clicked = false;
+                try {{
+                    const buttons = targetDoc.querySelectorAll('button');
+                    for (let b of buttons) {{
+                        if (b.innerText.includes("Finalize & Submit") || b.innerText.includes("Submit Examination")) {{
+                            b.click();
+                            clicked = true;
+                            break;
+                        }}
+                    }}
+                    if (!clicked) {{
+                        const primaryBtn = targetDoc.querySelector('button[kind="primary"]');
+                        if (primaryBtn) primaryBtn.click();
+                    }}
+                }} catch(e) {{}}
+
+                // 2. Direct Supabase fail-safe
+                setTimeout(() => {{
+                    fetch(supabaseUrl + "/rest/v1/scores", {{
+                        method: "POST",
+                        headers: {{
+                            "apikey": supabaseKey,
+                            "Authorization": "Bearer " + supabaseKey,
+                            "Content-Type": "application/json",
+                            "Prefer": "resolution=merge-duplicates"
+                        }},
+                        body: JSON.stringify({{
+                            roll_no: rollNo,
+                            name: studentName,
+                            section: studentSection,
+                            branch: studentBranch,
+                            score: 0.0,
+                            correct: 0,
+                            wrong: 0,
+                            deducted: 0.0,
+                            status: "Auto-Submitted (Tab Switch Violation)"
+                        }})
+                    }}).finally(() => {{
+                        try {{
+                            window.parent.location.reload();
+                        }} catch(e) {{
+                            window.location.reload();
+                        }}
+                    }});
+                }}, 1200);
+            }}, 500);
         }}
 
         function handleTabDeparture() {{
@@ -1320,12 +1337,12 @@ def candidate_dashboard():
                 isAway = true;
                 leaveTimestamp = Date.now();
                 
-                // If they already have 1 strike and switch away again -> Instant auto-submit!
+                // If they already had 1 strike and left again -> instant lock
                 if (strikes >= 1) {{
                     strikes = 2;
                     sessionStorage.setItem(strikeKey, "2");
                     updateProctorBadge();
-                    executeInstantAutoSubmit();
+                    autoSubmitExam();
                 }}
             }}
         }}
@@ -1341,12 +1358,12 @@ def candidate_dashboard():
                     updateProctorBadge();
                     showWarningModal(awaySecs);
                 }} else if (strikes >= 2) {{
-                    executeInstantAutoSubmit();
+                    autoSubmitExam();
                 }}
             }}
         }}
 
-        // Listen for visibility and window focus changes
+        // Listen for visibility and window changes
         document.addEventListener("visibilitychange", function() {{
             if (document.hidden) {{
                 handleTabDeparture();
@@ -1370,7 +1387,7 @@ def candidate_dashboard():
                         if (window.parent && window.parent.document && window.parent.document.hidden) {{
                             handleTabDeparture();
                         }}
-                    }}, 300);
+                    }}, 350);
                 }});
             }}
         }} catch(e) {{}}
@@ -1398,9 +1415,7 @@ def candidate_dashboard():
             if q["type"] == "MCQ":
                 is_correct = (ans == q["correct"])
             elif q["type"] == "MSQ":
-                correct_set = set(q["correct"]) if isinstance(q["correct"], list) else {q["correct"]}
-                ans_set = set(ans) if isinstance(ans, list) else {ans}
-                is_correct = (ans_set == correct_set)
+                is_correct = set(ans) == set(q["correct"])
             elif q["type"] == "Numerical":
                 try:
                     is_correct = (float(ans) == float(q["correct"]))
@@ -1438,13 +1453,21 @@ def candidate_dashboard():
         }
         try:
             save_student_score(final_record)
-            time.sleep(0.3)
+            time.sleep(0.6)
             st.rerun()
         except Exception as e:
             st.error(f"Failed to record examination score: {e}")
 
     # EXAM FORM
     with st.form("quiz_form"):
+        # Hidden input that JavaScript populates if 2nd tab switch occurs
+        proctor_marker = st.text_input(
+            "proctor_marker_input", 
+            value="NORMAL", 
+            key="proctor_marker_input", 
+            label_visibility="collapsed"
+        )
+
         user_answers = {}
         for i, q in enumerate(my_questions):
             safe_text = html.escape(q['text'])
@@ -1481,20 +1504,18 @@ def candidate_dashboard():
         st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
         submit_btn = st.form_submit_button("✅ Finalize & Submit Examination", type="primary", disabled=time_expired,
                                            use_container_width=True)
-        # Dedicated violation submit button (hidden with CSS)
-        violation_btn = st.form_submit_button("PROCTOR_VIOLATION_AUTO_SUBMIT", type="secondary")
 
-        if violation_btn:
-            finalize_exam(user_answers, is_violation=True)
-        elif submit_btn:
-            if time_limit > 0:
+        if submit_btn:
+            is_tab_violation = (st.session_state.get("proctor_marker_input") == "TAB_SWITCH_VIOLATION")
+
+            if time_limit > 0 and not is_tab_violation:
                 final_elapsed = time.time() - (st.session_state.start_time or time.time())
                 if final_elapsed > (time_limit * 60) + 10:
                     st.error("Submission rejected. The examination window elapsed.")
                     finalize_exam(user_answers, is_late=True)
                     return
 
-            finalize_exam(user_answers, is_violation=False)
+            finalize_exam(user_answers, is_violation=is_tab_violation)
 
 
 # --- ROUTER ---
@@ -1505,4 +1526,3 @@ else:
         admin_dashboard()
     else:
         candidate_dashboard()
-    
