@@ -1657,4 +1657,4 @@ else:
     if st.session_state.role == "admin":
         admin_dashboard()
     else:
-        candiadte_dashboard()
+        candidate_dashboard()
