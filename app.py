@@ -265,88 +265,50 @@ def get_supabase_client() -> Client:
 supabase = get_supabase_client()
 
 
-# --- INTELLIGENT COURSE & SEMESTER NORMALIZATION HELPER ---
-def normalize_course_name(raw_text: str, existing_branches: list = None) -> str:
+# --- HELPER: COURSE & SEMESTER NORMALIZATION ---
+def normalize_course_name(raw_name: str) -> str:
     """
-    Normalizes any format of course & semester into a single unified standard.
-    Example: 'Btech 5th sem', 'BTECH 5th Semester', 'B.Tech 5th sem' -> 'BTECH 5th Semester'
+    Standardizes course and semester entries into a unified format.
+    E.g., 'Btech 5th sem', 'btech 5th sem', 'BTECH 5th Semester', 'B.Tech 5th Sem'
+    will all be grouped and stored as 'BTECH 5th Semester'.
     """
-    if not raw_text:
+    if not raw_name:
         return ""
-    text = str(raw_text).strip()
+    s = raw_name.strip()
 
-    def make_key(s):
-        s = s.lower()
-        s = re.sub(r'[^a-z0-9]', '', s)
-        s = s.replace('semester', 'sem')
-        s = s.replace('first', '1st').replace('second', '2nd').replace('third', '3rd')
-        s = s.replace('fourth', '4th').replace('fifth', '5th').replace('sixth', '6th')
-        s = s.replace('seventh', '7th').replace('eighth', '8th')
-        s = re.sub(r'(\d)(sem)', r'\1th\2', s)
-        return s
-
-    target_key = make_key(text)
-
-    # Match with existing branches in the database if available
-    if existing_branches:
-        for b in existing_branches:
-            if make_key(b) == target_key:
-                return b
-
-    # Standardize common course degree acronyms
-    s = re.sub(r'(?i)\bb\s*\.?\s*tech\b', 'BTECH', text)
-    s = re.sub(r'(?i)\bm\s*\.?\s*tech\b', 'MTECH', s)
-    s = re.sub(r'(?i)\bb\s*\.?\s*c\s*\.?\s*a\b', 'BCA', s)
-    s = re.sub(r'(?i)\bm\s*\.?\s*c\s*\.?\s*a\b', 'MCA', s)
-    s = re.sub(r'(?i)\bb\s*\.?\s*s\s*\.?\s*c\b', 'BSC', s)
-    s = re.sub(r'(?i)\bm\s*\.?\s*s\s*\.?\s*c\b', 'MSC', s)
-    s = re.sub(r'(?i)\bb\s*\.?\s*b\s*\.?\s*a\b', 'BBA', s)
-    s = re.sub(r'(?i)\bm\s*\.?\s*b\s*\.?\s*a\b', 'MBA', s)
-    s = re.sub(r'(?i)\bb\s*\.?\s*e\b', 'BE', s)
-    s = re.sub(r'(?i)\bm\s*\.?\s*e\b', 'ME', s)
-
-    cleaned = re.sub(r'[\.\-_]', ' ', s)
-    tokens = [t.strip() for t in cleaned.split() if t.strip()]
-
-    course_parts = []
-    sem_num = None
-    has_sem_word = False
-
-    num_words = {
-        '1': '1st', '1st': '1st', 'first': '1st',
-        '2': '2nd', '2nd': '2nd', 'second': '2nd',
-        '3': '3rd', '3rd': '3rd', 'third': '3rd',
-        '4': '4th', '4th': '4th', 'fourth': '4th',
-        '5': '5th', '5th': '5th', 'fifth': '5th',
-        '6': '6th', '6th': '6th', 'sixth': '6th',
-        '7': '7th', '7th': '7th', 'seventh': '7th',
-        '8': '8th', '8th': '8th', 'eighth': '8th',
+    degree_map = {
+        r'\bb\.?\s*tech\b': 'BTECH',
+        r'\bm\.?\s*tech\b': 'MTECH',
+        r'\bb\.?\s*c\.?\s*a\.?\b': 'BCA',
+        r'\bm\.?\s*c\.?\s*a\.?\b': 'MCA',
+        r'\bb\.?\s*sc\b': 'BSC',
+        r'\bm\.?\s*sc\b': 'MSC',
+        r'\bb\.?\s*b\.?\s*a\.?\b': 'BBA',
+        r'\bm\.?\s*b\.?\s*a\.?\b': 'MBA',
+        r'\bb\.?\s*com\b': 'BCOM',
+        r'\bm\.?\s*com\b': 'MCOM',
     }
 
-    for token in tokens:
-        tl = token.lower()
-        if tl in ['sem', 'semester', 'semesters']:
-            has_sem_word = True
-        elif tl in num_words:
-            sem_num = num_words[tl]
-        elif re.match(r'^[1-8](st|nd|rd|th)?$', tl):
-            digit = tl[0]
-            sem_num = num_words.get(digit, f'{digit}th')
-        else:
-            m = re.match(r'^([1-8])(st|nd|rd|th)?(sem|semester)?$', tl)
-            if m:
-                sem_num = num_words.get(m.group(1), f'{m.group(1)}th')
-                has_sem_word = True
-            else:
-                course_parts.append(token.upper())
+    sem_match = re.search(r'(\d+)(?:st|nd|rd|th)?\s*(?:sem(?:ester)?)?', s, re.IGNORECASE)
+    sem_num = sem_match.group(1) if sem_match else None
 
-    course_str = ' '.join(course_parts)
-    if sem_num:
-        return f'{course_str} {sem_num} Semester'.strip()
-    elif has_sem_word:
-        return f'{course_str} Semester'.strip()
-    else:
-        return course_str if course_str else text
+    detected_degree = None
+    for pattern, deg in degree_map.items():
+        if re.search(pattern, s, re.IGNORECASE):
+            detected_degree = deg
+            break
+
+    if detected_degree and sem_num:
+        n = int(sem_num)
+        if 11 <= (n % 100) <= 13:
+            suffix = 'th'
+        else:
+            suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
+        return f"{detected_degree} {n}{suffix} Semester"
+
+    cleaned = re.sub(r'\bsem\b', 'Semester', s, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    return cleaned
 
 
 # --- DATABASE HELPER FUNCTIONS ---
@@ -360,19 +322,27 @@ def get_all_questions():
 
 
 def get_questions_by_branch(branch):
+    norm = normalize_course_name(branch)
     try:
-        res = supabase.table("questions").select("*").ilike("branch", branch.strip()).execute()
-        return res.data or []
+        res = supabase.table("questions").select("*").ilike("branch", norm).execute()
+        if res.data:
+            return res.data
+        # Fallback to match in-memory if variations exist in legacy records
+        all_q = get_all_questions()
+        return [q for q in all_q if normalize_course_name(q.get("branch", "")).lower() == norm.lower()]
     except Exception as e:
         st.error(f"Error fetching branch questions: {e}")
         return []
 
 
 def add_question(q_data):
+    q_data["branch"] = normalize_course_name(q_data.get("branch", ""))
     supabase.table("questions").insert(q_data).execute()
 
 
 def update_question(q_id, q_data):
+    if "branch" in q_data:
+        q_data["branch"] = normalize_course_name(q_data["branch"])
     supabase.table("questions").update(q_data).eq("id", q_id).execute()
 
 
@@ -389,21 +359,30 @@ def get_all_settings():
 
 
 def get_branch_settings(branch):
+    norm = normalize_course_name(branch)
     try:
-        res = supabase.table("settings").select("*").ilike("branch", branch.strip()).execute()
+        res = supabase.table("settings").select("*").ilike("branch", norm).execute()
         if res.data and len(res.data) > 0:
             return {
                 "time_limit": res.data[0].get("time_limit", 30),
                 "passkey": str(res.data[0].get("passkey") or "").strip()
             }
+        all_cfg = get_all_settings()
+        for cfg in all_cfg:
+            if normalize_course_name(cfg.get("branch", "")).lower() == norm.lower():
+                return {
+                    "time_limit": cfg.get("time_limit", 30),
+                    "passkey": str(cfg.get("passkey") or "").strip()
+                }
     except Exception:
         pass
     return {"time_limit": 30, "passkey": ""}
 
 
 def save_branch_settings(branch, time_limit, passkey):
+    norm = normalize_course_name(branch)
     payload = {
-        "branch": branch.strip(),
+        "branch": norm,
         "time_limit": int(time_limit),
         "passkey": str(passkey).strip()
     }
@@ -430,14 +409,19 @@ def get_student_score(roll_no):
 
 
 def get_branch_scores(branch):
+    norm = normalize_course_name(branch)
     try:
-        res = supabase.table("scores").select("*").ilike("branch", branch.strip()).order("score", desc=True).execute()
-        return res.data or []
+        res = supabase.table("scores").select("*").ilike("branch", norm).order("score", desc=True).execute()
+        if res.data:
+            return res.data
+        all_s = get_all_scores()
+        return [s for s in all_s if normalize_course_name(s.get("branch", "")).lower() == norm.lower()]
     except Exception:
         return []
 
 
 def save_student_score(score_record):
+    score_record["branch"] = normalize_course_name(score_record.get("branch", ""))
     supabase.table("scores").upsert(score_record).execute()
 
 
@@ -446,9 +430,10 @@ def delete_student_score(roll_no):
 
 
 def delete_branch_data(branch):
-    supabase.table("questions").delete().ilike("branch", branch.strip()).execute()
-    supabase.table("scores").delete().ilike("branch", branch.strip()).execute()
-    supabase.table("settings").delete().ilike("branch", branch.strip()).execute()
+    norm = normalize_course_name(branch)
+    supabase.table("questions").delete().ilike("branch", norm).execute()
+    supabase.table("scores").delete().ilike("branch", norm).execute()
+    supabase.table("settings").delete().ilike("branch", norm).execute()
 
 
 def wipe_all_data():
@@ -470,7 +455,7 @@ def parse_saved_responses(responses_data):
     return {}
 
 
-# --- PERSISTENT SESSION RESTORATION (Prevents logout and timer reset on browser reload) ---
+# --- PERSISTENT SESSION RESTORATION ---
 query_params = st.query_params
 
 if "logged_in" not in st.session_state or not st.session_state.logged_in:
@@ -491,20 +476,22 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
             "Section": query_params.get("c_section", ""),
             "Branch": query_params.get("c_branch", "")
         }
+        # Persist and restore the start timestamp across page reloads
+        saved_start = query_params.get("c_start_time")
+        if saved_start:
+            try:
+                st.session_state.start_time = float(saved_start)
+            except Exception:
+                st.session_state.start_time = time.time()
+        else:
+            st.session_state.start_time = time.time()
     else:
         st.session_state.logged_in = False
         st.session_state.user_id = ""
         st.session_state.role = ""
         st.session_state.student_info = {}
 
-# Restore original start time from query parameters so refreshing does NOT reset the timer
-saved_start_time = query_params.get("start_time")
-if saved_start_time:
-    try:
-        st.session_state.start_time = float(saved_start_time)
-    except Exception:
-        st.session_state.start_time = None
-elif "start_time" not in st.session_state:
+if "start_time" not in st.session_state:
     st.session_state.start_time = None
 
 
@@ -538,7 +525,7 @@ def login_screen():
 
         with candidate_subtab1:
             st.markdown(
-                "<p style='font-size: 0.95rem; color: #475569; margin-bottom: 12px;'>All fields are mandatory. Enter your student credentials and authorized passkey to begin or resume your examination.</p>",
+                "<p style='font-size: 0.95rem; color: #475569; margin-bottom: 12px;'>Enter all candidate details and authorized passkey to begin or resume your examination.</p>",
                 unsafe_allow_html=True)
             with st.form("student_login_form"):
                 col1, col2 = st.columns(2)
@@ -556,39 +543,36 @@ def login_screen():
                 submit_student = st.form_submit_button("🚀 Access Assessment", type="primary", use_container_width=True)
 
                 if submit_student:
-                    # Comprehensive validation: check every detail and provide a clear, specific response if any are missing
-                    missing_details = []
-                    if not name or not name.strip():
-                        missing_details.append("Full Name")
-                    if not rollno or not rollno.strip():
-                        missing_details.append("Roll Number")
-                    if not section or not section.strip():
-                        missing_details.append("Section")
-                    if not branch or not branch.strip():
-                        missing_details.append("Course & Semester")
-                    if not student_passkey or not student_passkey.strip():
-                        missing_details.append("Quiz Passkey")
+                    # Enforce that every candidate enters all details
+                    missing_fields = []
+                    if not name.strip():
+                        missing_fields.append("Full Name")
+                    if not rollno.strip():
+                        missing_fields.append("Roll Number")
+                    if not section.strip():
+                        missing_fields.append("Section")
+                    if not branch.strip():
+                        missing_fields.append("Course & Semester")
+                    if not student_passkey.strip():
+                        missing_fields.append("Quiz Passkey")
 
-                    if missing_details:
-                        st.error(f"⚠️ Mandatory details missing! Please provide: {', '.join(missing_details)}.")
+                    if missing_fields:
+                        st.error(f"⚠️ Mandatory candidate information missing. Please enter: {', '.join(missing_fields)}.")
                     else:
-                        # Group course & semester into single standard representation
-                        all_qs = get_all_questions()
-                        existing_branches = sorted(list(set([q["branch"] for q in all_qs if q.get("branch")])))
-                        clean_branch = normalize_course_name(branch, existing_branches)
+                        normalized_branch = normalize_course_name(branch)
+                        branch_questions = get_questions_by_branch(normalized_branch)
 
-                        branch_questions = get_questions_by_branch(clean_branch)
                         if not branch_questions:
-                            st.error(f"❌ No active quiz found for '{clean_branch}'. Please verify the course and semester name with your instructor.")
+                            st.error(f"❌ No active quiz found for '{normalized_branch}'. Please verify the course and semester.")
                         else:
-                            branch_config = get_branch_settings(clean_branch)
+                            branch_config = get_branch_settings(normalized_branch)
                             required_passkey = branch_config.get("passkey", "")
-                            existing_score = get_student_score(rollno)
+                            clean_roll = rollno.strip().upper()
+                            existing_score = get_student_score(clean_roll)
 
                             if required_passkey and student_passkey.strip() != required_passkey and not existing_score:
                                 st.error("❌ Invalid Quiz Passkey. Please verify with your instructor.")
                             else:
-                                clean_roll = rollno.strip().upper()
                                 clean_name = name.strip()
                                 clean_sec = section.strip()
 
@@ -599,20 +583,22 @@ def login_screen():
                                     "Name": clean_name,
                                     "Roll No": clean_roll,
                                     "Section": clean_sec,
-                                    "Branch": clean_branch
+                                    "Branch": normalized_branch
                                 }
-                                # Save session to query params so browser reload keeps student logged in
+
+                                # Persist candidate session parameters in query parameters
                                 st.query_params["session_role"] = "candidate"
                                 st.query_params["session_user"] = clean_roll
                                 st.query_params["c_name"] = clean_name
                                 st.query_params["c_section"] = clean_sec
-                                st.query_params["c_branch"] = clean_branch
+                                st.query_params["c_branch"] = normalized_branch
 
                                 if not existing_score:
-                                    start_ts = int(time.time())
-                                    st.session_state.start_time = start_ts
-                                    st.query_params["start_time"] = str(start_ts)
-                                    st.query_params["strikes"] = "0"
+                                    current_ts = time.time()
+                                    st.session_state.start_time = current_ts
+                                    st.query_params["c_start_time"] = str(current_ts)
+                                    st.query_params["c_strikes"] = "0"
+
                                 st.rerun()
 
         with candidate_subtab2:
@@ -630,20 +616,17 @@ def login_screen():
                 submit_history = st.form_submit_button("🔍 Retrieve My Answer Sheet", type="primary", use_container_width=True)
 
                 if submit_history:
-                    missing_hist = []
-                    if not hist_roll or not hist_roll.strip():
-                        missing_hist.append("Roll Number")
-                    if not hist_branch or not hist_branch.strip():
-                        missing_hist.append("Course & Semester")
+                    hist_missing = []
+                    if not hist_roll.strip():
+                        hist_missing.append("Roll Number")
+                    if not hist_branch.strip():
+                        hist_missing.append("Course & Semester")
 
-                    if missing_hist:
-                        st.error(f"⚠️ Mandatory details missing: Please enter {', '.join(missing_hist)}.")
+                    if hist_missing:
+                        st.error(f"⚠️ Mandatory information missing. Please enter: {', '.join(hist_missing)}.")
                     else:
                         clean_roll = hist_roll.strip().upper()
-                        all_qs = get_all_questions()
-                        existing_branches = sorted(list(set([q["branch"] for q in all_qs if q.get("branch")])))
-                        clean_branch = normalize_course_name(hist_branch, existing_branches)
-
+                        clean_branch = normalize_course_name(hist_branch)
                         rec = get_student_score(clean_roll)
                         if not rec:
                             st.error(f"❌ No completed assessment record found for Roll Number '{clean_roll}'.")
@@ -713,6 +696,7 @@ def admin_dashboard():
     ])
 
     questions = get_all_questions()
+    # Normalize and group existing courses to prevent duplicate entries
     existing_branches = sorted(list(set([normalize_course_name(q["branch"]) for q in questions if q.get("branch")])))
     scores_data = get_all_scores()
 
@@ -744,7 +728,7 @@ def admin_dashboard():
                 results_list.append({
                     "Roll No": item["roll_no"],
                     "Candidate Name": item["name"],
-                    "Course": normalize_course_name(item["branch"]),
+                    "Course": normalize_course_name(item.get("branch", "")),
                     "Final Score": float(item.get("score", 0)),
                     "Correct": item.get("correct", 0),
                     "Incorrect": item.get("wrong", 0),
@@ -760,7 +744,7 @@ def admin_dashboard():
 
             st.divider()
             st.markdown("#### 🗑️ Revoke Candidate Submission (Allow Retake)")
-            student_options = [f"{item['roll_no']} - {item['name']} ({normalize_course_name(item['branch'])})" for item in scores_data]
+            student_options = [f"{item['roll_no']} - {item['name']} ({normalize_course_name(item.get('branch', ''))})" for item in scores_data]
 
             with st.form("delete_student_form"):
                 student_to_delete = st.selectbox("Select Candidate Record to Purge", student_options)
@@ -807,7 +791,6 @@ def admin_dashboard():
                 if not q_text or not correct_input or not target_branch:
                     st.error("Course & Semester, question text, and correct answer are mandatory.")
                 else:
-                    normalized_target_branch = normalize_course_name(target_branch, existing_branches)
                     options = [opt.strip() for opt in options_input.split(",")] if options_input else []
                     is_valid = True
 
@@ -823,8 +806,9 @@ def admin_dashboard():
                         correct_ans = correct_input.strip()
 
                     if is_valid:
+                        normalized_target = normalize_course_name(target_branch)
                         new_question = {
-                            "branch": normalized_target_branch,
+                            "branch": normalized_target,
                             "text": q_text,
                             "type": q_type,
                             "marks": marks,
@@ -834,7 +818,7 @@ def admin_dashboard():
                         }
                         try:
                             add_question(new_question)
-                            st.toast(f"✅ Question saved for {normalized_target_branch}!", icon="🎉")
+                            st.toast(f"✅ Question saved for {normalized_target}!", icon="🎉")
                             time.sleep(0.6)
                             st.rerun()
                         except Exception as e:
@@ -846,7 +830,7 @@ def admin_dashboard():
         if not existing_branches:
             st.info("ℹ️ No questions currently populated in the database.")
         else:
-            branch_to_edit = st.selectbox("Filter Question Bank by Branch", existing_branches)
+            branch_to_edit = st.selectbox("Filter Question Bank by Course", existing_branches)
             branch_questions = [q for q in questions if normalize_course_name(q.get("branch", "")).lower() == branch_to_edit.lower()]
 
             if not branch_questions:
@@ -925,7 +909,7 @@ def admin_dashboard():
     with tab4:
         st.subheader("Quiz Passkeys & Time Window Configurations")
         if not existing_branches:
-            st.info("Please create questions for a branch before configuring policies.")
+            st.info("Please create questions for a course before configuring policies.")
         else:
             branch_for_timer = st.selectbox("Target Course / Branch", existing_branches)
             current_settings = get_branch_settings(branch_for_timer)
@@ -963,7 +947,7 @@ def admin_dashboard():
                         "Time Limit (Mins)": c.get("time_limit", 30),
                         "Active Passkey": c.get("passkey", "")
                     })
-                df_cfg = pd.DataFrame(formatted_cfg)
+                df_cfg = pd.DataFrame(formatted_cfg).drop_duplicates(subset=["Course / Branch"])
                 st.dataframe(df_cfg, use_container_width=True)
 
     # 5. DANGER ZONE
@@ -1004,8 +988,21 @@ def admin_dashboard():
 
 # --- CANDIDATE DASHBOARD ---
 def candidate_dashboard():
-    student_branch = normalize_course_name(st.session_state.student_info.get('Branch', ''))
+    raw_student_branch = st.session_state.student_info.get('Branch', '')
+    student_branch = normalize_course_name(raw_student_branch)
     roll_no = st.session_state.user_id
+
+    # Restore or initialize start_time cleanly to ensure it never resets on page refresh
+    if st.session_state.start_time is None:
+        saved_start = st.query_params.get("c_start_time")
+        if saved_start:
+            try:
+                st.session_state.start_time = float(saved_start)
+            except Exception:
+                st.session_state.start_time = time.time()
+        else:
+            st.session_state.start_time = time.time()
+            st.query_params["c_start_time"] = str(st.session_state.start_time)
 
     col1, col2 = st.columns([3.5, 1])
     with col1:
@@ -1031,10 +1028,10 @@ def candidate_dashboard():
             st.markdown("""
                 <div class="warning-card">
                     <div style="font-size: 2rem; margin-bottom: 4px;">🚨</div>
-                    <h3 style="color: #991b1b; margin: 0 0 6px 0;">Quiz Submitted Under Proctoring Violation</h3>
+                    <h3 style="color: #991b1b; margin: 0 0 6px 0;">Assessment Completed (Proctoring Limit Reached)</h3>
                     <p style="margin: 0; font-size: 0.95rem; line-height: 1.5;">
-                        <b>Cheating Prevention Limit Exceeded:</b> You navigated away from or minimized the examination window 2 times. 
-                        Your examination was locked and submitted to the instructor database.
+                        <b>Proctoring Action Logged:</b> You triggered 2 tab-switch violations during this examination. 
+                        Your examination inputs were locked and your responses were finalized and submitted.
                     </p>
                 </div>
             """, unsafe_allow_html=True)
@@ -1187,7 +1184,7 @@ def candidate_dashboard():
             st.markdown("</div>", unsafe_allow_html=True)
 
         st.divider()
-        st.markdown("### 🏆 Branch Standing & Leaderboard")
+        st.markdown("### 🏆 Course Standing & Leaderboard")
         branch_scores = get_branch_scores(student_branch)
         if branch_scores:
             df_leaderboard = pd.DataFrame(
@@ -1197,56 +1194,47 @@ def candidate_dashboard():
         return
 
     # -------------------------------------------------------------
-    # TAKING THE QUIZ & TIMER RECOVERY
+    # TAKING THE QUIZ
     # -------------------------------------------------------------
     branch_config = get_branch_settings(student_branch)
     time_limit = branch_config.get("time_limit", 30)
     time_expired = False
 
-    # Ensure start_time is restored from session_state, query_params, or initialized
-    if not st.session_state.start_time:
-        if st.query_params.get("start_time"):
-            try:
-                st.session_state.start_time = float(st.query_params.get("start_time"))
-            except Exception:
-                st.session_state.start_time = time.time()
-        else:
-            st.session_state.start_time = time.time()
-        st.query_params["start_time"] = str(int(st.session_state.start_time))
-
+    # Calculate elapsed and remaining time accurately from persisted start timestamp
     if time_limit > 0:
         elapsed_seconds = int(time.time() - st.session_state.start_time)
         remaining_seconds = max(0, int((time_limit * 60) - elapsed_seconds))
 
         if remaining_seconds <= 0:
-            st.error("⏱️ Allocated examination time has expired. Question inputs are locked. Please submit your exam.")
+            st.error("⏱️ Allocated examination time has expired. Question inputs are locked.")
             time_expired = True
     else:
         remaining_seconds = 999999
 
-    # Check persisted violation strikes from query parameters
-    current_strikes = int(st.query_params.get("strikes", "0"))
-    is_locked_due_to_violation = (current_strikes >= 2)
+    # Check for tab-switch violations from persistent query parameters
+    try:
+        current_strikes = int(st.query_params.get("c_strikes", 0))
+    except Exception:
+        current_strikes = 0
 
-    if is_locked_due_to_violation:
+    locked_due_to_violations = (current_strikes >= 2)
+
+    if locked_due_to_violations:
         st.markdown("""
-        <div class="warning-card">
-            <div style="font-size: 1.8rem; margin-bottom: 4px;">🚨</div>
-            <h3 style="color: #991b1b; margin: 0 0 6px 0;">Examination Locked: Tab Switch Violations Exceeded (2/2)</h3>
-            <p style="margin: 0; font-size: 0.95rem; line-height: 1.5;">
-                You have switched tabs twice during this assessment. Further question edits are strictly locked.
-                <br/><b>You must now finalize and submit your examination using the submit button below.</b>
-            </p>
-        </div>
+            <div class="warning-card">
+                <div style="font-size: 2rem; margin-bottom: 4px;">🚨</div>
+                <h3 style="color: #991b1b; margin: 0 0 6px 0;">Examination Locked: 2 Tab-Switch Violations Recorded</h3>
+                <p style="margin: 0; font-size: 0.95rem; line-height: 1.5;">
+                    You switched tabs or left the examination window 2 times after being warned. 
+                    <b>All question inputs are permanently locked. You are required to submit your examination now using the submit button below.</b>
+                </p>
+            </div>
         """, unsafe_allow_html=True)
 
-    inputs_disabled = (time_expired or is_locked_due_to_violation)
-
     js_roll_no = json.dumps(roll_no)
-    js_student_name = json.dumps(st.session_state.student_info.get("Name", ""))
-    js_student_branch = json.dumps(student_branch)
+    start_ts_ms = int(st.session_state.start_time * 1000)
 
-    # PERSISTENT REAL-TIME PROCTORING COMPONENT WITH CLIENT-SIDE LOCKING & FORCED SUBMIT
+    # ADVANCED PROCTORING COMPONENT (FORCES SUBMISSION ON 2 VIOLATIONS WITHOUT AUTO-SUBMITTING)
     proctor_component_code = f"""
     <div style="
         background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
@@ -1281,10 +1269,21 @@ def candidate_dashboard():
 
     <script>
         const rollNo = {js_roll_no};
-        const strikeKey = "quiz_strikes_" + rollNo;
+        const serverStartMs = {start_ts_ms};
+        const timeLimitMinutes = {time_limit};
 
-        // 1. COUNTDOWN TIMER
-        let remaining = {remaining_seconds};
+        // 1. COUNTDOWN TIMER: PERSISTENT ACROSS PAGE REFRESHES
+        const startKey = "quiz_start_time_" + rollNo;
+        let storedStart = localStorage.getItem(startKey);
+        let startTimeMs;
+        if (!storedStart) {{
+            startTimeMs = serverStartMs;
+            localStorage.setItem(startKey, String(startTimeMs));
+        }} else {{
+            startTimeMs = Math.min(parseInt(storedStart, 10), serverStartMs);
+            localStorage.setItem(startKey, String(startTimeMs));
+        }}
+
         const display = document.getElementById('quiz-countdown');
 
         function formatTime(secs) {{
@@ -1293,7 +1292,14 @@ def candidate_dashboard():
             return (m < 10 ? '0' : '') + m + 'm ' + (s < 10 ? '0' : '') + s + 's';
         }}
 
+        function getRemainingSecs() {{
+            if (timeLimitMinutes <= 0) return 999999;
+            const elapsed = Math.floor((Date.now() - startTimeMs) / 1000);
+            return Math.max(0, (timeLimitMinutes * 60) - elapsed);
+        }}
+
         function tick() {{
+            const remaining = getRemainingSecs();
             if (remaining <= 0) {{
                 display.innerText = "00m 00s (Time Over)";
                 display.style.color = "#f87171";
@@ -1304,27 +1310,32 @@ def candidate_dashboard():
                 display.style.color = "#f87171";
             }}
             display.innerText = formatTime(remaining);
-            remaining--;
         }}
         tick();
         const timerInterval = setInterval(tick, 1000);
 
-        // 2. PERSISTENT PROCTORING ENGINE (Survives refreshes via localStorage)
+        // 2. STRIKE TRACKING (PERSISTENT VIA LOCALSTORAGE - DOES NOT RESET ON REFRESH)
+        const strikeKey = "quiz_strikes_" + rollNo;
         let strikes = parseInt(localStorage.getItem(strikeKey) || "0", 10);
-        let isAway = false;
-        let leaveTimestamp = 0;
 
-        function syncStrikesToParentUrl(s) {{
+        // Synchronize with URL query parameters
+        function syncStrikesToParent(strikeCount, forceReload = false) {{
             try {{
-                if (window.parent && window.parent.location) {{
-                    const u = new URL(window.parent.location.href);
-                    if (u.searchParams.get("strikes") !== String(s)) {{
-                        u.searchParams.set("strikes", String(s));
-                        window.parent.history.replaceState(null, "", u.toString());
+                const targetWin = (window.parent && window.parent.location) ? window.parent : window;
+                const url = new URL(targetWin.location.href);
+                if (url.searchParams.get("c_strikes") !== String(strikeCount)) {{
+                    url.searchParams.set("c_strikes", String(strikeCount));
+                    if (forceReload) {{
+                        targetWin.location.href = url.toString();
+                    }} else {{
+                        targetWin.history.replaceState(null, "", url.toString());
                     }}
                 }}
             }} catch(e) {{}}
         }}
+
+        let isAway = false;
+        let leaveTimestamp = 0;
 
         function updateProctorBadge() {{
             const badge = document.getElementById("proctor-badge");
@@ -1335,7 +1346,7 @@ def candidate_dashboard():
                 badge.style.color = "#4338ca";
                 badge.style.borderColor = "#c7d2fe";
             }} else if (strikes === 1) {{
-                badge.innerHTML = "⚠️ Strike 1/2 Recorded • Next Switch = Lock Exam";
+                badge.innerHTML = "⚠️ Strike 1/2 Recorded • Next Switch = Exam Lock";
                 badge.style.background = "#fee2e2";
                 badge.style.color = "#991b1b";
                 badge.style.borderColor = "#f87171";
@@ -1347,7 +1358,6 @@ def candidate_dashboard():
             }}
         }}
         updateProctorBadge();
-        syncStrikesToParentUrl(strikes);
 
         function playAlertTone() {{
             try {{
@@ -1366,10 +1376,10 @@ def candidate_dashboard():
             }} catch(e) {{}}
         }}
 
+        // Warning Modal on Strike 1
         function showWarningModal(awayDuration) {{
             playAlertTone();
             const targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
-            
             const existing = targetDoc.getElementById("proctor-warning-modal-overlay");
             if (existing) existing.remove();
 
@@ -1381,11 +1391,11 @@ def candidate_dashboard():
                 '<div style="font-size:3.2rem; line-height:1; margin-bottom:10px;">⚠️</div>' +
                 '<h2 style="color:#991b1b; font-size:1.55rem; font-weight:800; margin:0 0 10px 0;">PROCTORING VIOLATION DETECTED</h2>' +
                 '<div style="background:#fef2f2; border:1px solid #fecaca; border-radius:12px; padding:10px 16px; color:#b91c1c; font-weight:700; font-size:0.92rem; margin-bottom:14px;">' +
-                    'Strike 1 of 2 Recorded • Left Window for ' + awayDuration + 's' +
+                    'Strike 1 of 2 Recorded • Navigated Away for ' + awayDuration + 's' +
                 '</div>' +
                 '<p style="color:#475569; font-size:0.95rem; line-height:1.6; margin-bottom:22px;">' +
-                    'You switched tabs or navigated away from the examination window. Navigating to external applications is strictly prohibited.' +
-                    '<br/><br/><b style="color:#dc2626;">This is your final warning. If you switch tabs or leave one more time, your exam will be permanently locked and you will be forced to submit immediately.</b>' +
+                    'You switched tabs or navigated away from the examination window. ' +
+                    '<br/><br/><b style="color:#dc2626;">This is your final warning. If you switch tabs one more time, all questions will be permanently locked and you will be required to submit your exam immediately.</b>' +
                 '</p>' +
                 '<button id="ack-warning-btn" style="background:linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); color:#ffffff; border:none; padding:13px 26px; font-size:1rem; font-weight:700; border-radius:12px; cursor:pointer; width:100%; box-shadow:0 4px 14px rgba(220,38,38,0.3);">' +
                     'I Understand & Acknowledge (Return to Quiz)' +
@@ -1402,25 +1412,23 @@ def candidate_dashboard():
             }}
         }}
 
-        // LOCK QUIZ AND REQUIRE CANDIDATE TO SUBMIT (NO AUTO-SUBMIT)
-        function lockAndRequireSubmission() {{
+        // Lock Exam Modal on Strike 2 (Requires Candidate to Submit)
+        function lockExamAndPromptSubmit() {{
             playAlertTone();
             const targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
-
-            // Disable all input fields on parent page
-            const questionInputs = targetDoc.querySelectorAll('.question-box input, .question-box button');
-            questionInputs.forEach(el => {{
-                el.disabled = true;
-            }});
-
+            
             const existingWarn = targetDoc.getElementById("proctor-warning-modal-overlay");
             if (existingWarn) existingWarn.remove();
 
-            let lockOverlay = targetDoc.getElementById("proctor-force-lock-overlay");
-            if (!lockOverlay) {{
-                lockOverlay = targetDoc.createElement("div");
-                lockOverlay.id = "proctor-force-lock-overlay";
-                lockOverlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.92); backdrop-filter:blur(8px); z-index:99999999; display:flex; align-items:center; justify-content:center; font-family:'Plus Jakarta Sans', sans-serif;";
+            // Disable all interactive radio / checkbox / input elements
+            const inputs = targetDoc.querySelectorAll('input:not([type="submit"]), select, textarea');
+            inputs.forEach(el => {{ el.disabled = true; }});
+
+            const existingLock = targetDoc.getElementById("proctor-lock-overlay");
+            if (!existingLock) {{
+                const lockOverlay = targetDoc.createElement("div");
+                lockOverlay.id = "proctor-lock-overlay";
+                lockOverlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.92); backdrop-filter:blur(10px); z-index:99999999; display:flex; align-items:center; justify-content:center; font-family:'Plus Jakarta Sans', sans-serif;";
                 
                 lockOverlay.innerHTML = '<div style="background:#ffffff; border-radius:20px; max-width:520px; width:90%; padding:36px 28px; text-align:center; box-shadow:0 25px 50px -12px rgba(220,38,38,0.4); border:2px solid #ef4444;">' +
                     '<div style="font-size:3.5rem; line-height:1; margin-bottom:12px;">🚨</div>' +
@@ -1429,37 +1437,34 @@ def candidate_dashboard():
                         'Proctoring Limit Exceeded (Strike 2 of 2)' +
                     '</div>' +
                     '<p style="color:#475569; font-size:0.95rem; line-height:1.6; margin-bottom:24px;">' +
-                        'You navigated away from the exam window again after receiving your final warning. Your test is locked and questions can no longer be modified.' +
-                        '<br/><br/><b style="color:#b91c1c;">You must now submit your examination to record your score.</b>' +
+                        'You switched tabs again after receiving a warning. All question inputs are now locked. ' +
+                        '<br/><br/><b>You must now finalize and submit your examination.</b>' +
                     '</p>' +
-                    '<button id="candidate-submit-now-btn" style="background:linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); color:#ffffff; border:none; padding:14px 28px; font-size:1.05rem; font-weight:700; border-radius:12px; cursor:pointer; width:100%; box-shadow:0 4px 14px rgba(220,38,38,0.35);">' +
-                        '📤 Finalize & Submit Examination Now' +
+                    '<button id="proctor-force-submit-btn" style="background:linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); color:#ffffff; border:none; padding:14px 28px; font-size:1.05rem; font-weight:700; border-radius:12px; cursor:pointer; width:100%; box-shadow:0 4px 14px rgba(220,38,38,0.35);">' +
+                        '📝 Submit Examination Now' +
                     '</button>' +
                 '</div>';
+
                 targetDoc.body.appendChild(lockOverlay);
 
-                const subNowBtn = targetDoc.getElementById("candidate-submit-now-btn");
-                if (subNowBtn) {{
-                    subNowBtn.onclick = function() {{
-                        subNowBtn.disabled = true;
-                        subNowBtn.innerText = "Processing Submission...";
-                        // Trigger the form submit button in Streamlit
-                        const allBtns = targetDoc.querySelectorAll('button[kind="primary"]');
-                        for (let b of allBtns) {{
-                            if (b.innerText.includes("Submit") || b.innerText.includes("Finalize")) {{
-                                b.disabled = false;
-                                b.click();
-                                return;
-                            }}
+                const forceBtn = targetDoc.getElementById("proctor-force-submit-btn");
+                if (forceBtn) {{
+                    forceBtn.onclick = function() {{
+                        lockOverlay.remove();
+                        const submitButton = targetDoc.querySelector('button[kind="primary"]');
+                        if (submitButton) {{
+                            submitButton.click();
+                        }} else {{
+                            syncStrikesToParent(2, true);
                         }}
                     }};
                 }}
             }}
         }}
 
-        // If page is loaded or refreshed and candidate is already at 2 strikes, lock immediately
+        // If page is refreshed while on strike 2, enforce the locked modal and badge
         if (strikes >= 2) {{
-            lockAndRequireSubmission();
+            lockExamAndPromptSubmit();
         }}
 
         function handleTabDeparture() {{
@@ -1467,12 +1472,12 @@ def candidate_dashboard():
                 isAway = true;
                 leaveTimestamp = Date.now();
                 
-                if (strikes >= 1) {{
+                if (strikes === 1) {{
                     strikes = 2;
                     localStorage.setItem(strikeKey, "2");
-                    syncStrikesToParentUrl(2);
                     updateProctorBadge();
-                    lockAndRequireSubmission();
+                    syncStrikesToParent(2, false);
+                    lockExamAndPromptSubmit();
                 }}
             }}
         }}
@@ -1485,15 +1490,16 @@ def candidate_dashboard():
                 if (strikes === 0) {{
                     strikes = 1;
                     localStorage.setItem(strikeKey, "1");
-                    syncStrikesToParentUrl(1);
                     updateProctorBadge();
+                    syncStrikesToParent(1, false);
                     showWarningModal(awaySecs);
                 }} else if (strikes >= 2) {{
-                    lockAndRequireSubmission();
+                    lockExamAndPromptSubmit();
                 }}
             }}
         }}
 
+        // Visibility & focus listeners
         document.addEventListener("visibilitychange", function() {{
             if (document.hidden) {{
                 handleTabDeparture();
@@ -1511,7 +1517,7 @@ def candidate_dashboard():
                         handleTabReturn();
                     }}
                 }});
-                
+
                 window.parent.addEventListener("blur", function() {{
                     setTimeout(() => {{
                         if (window.parent && window.parent.document && window.parent.document.hidden) {{
@@ -1526,7 +1532,7 @@ def candidate_dashboard():
     components.html(proctor_component_code, height=100)
 
     # Standard Exam Form Submission
-    def finalize_normal_exam(user_ans_dict, is_late=False):
+    def finalize_normal_exam(user_ans_dict, is_late=False, is_violation=False):
         score = 0.0
         correct_count = 0
         wrong_count = 0
@@ -1564,14 +1570,12 @@ def candidate_dashboard():
                     score -= penalty
                     total_deducted += penalty
 
-        # Determine appropriate status
-        final_strikes = int(st.query_params.get("strikes", "0"))
-        if final_strikes >= 2:
-            status_desc = "Submitted (Tab Switch Violation)"
+        if is_violation:
+            status_text = "Submitted (2 Tab Switch Violations)"
         elif is_late:
-            status_desc = "Rejected (Late Submission)"
+            status_text = "Rejected (Late Submission)"
         else:
-            status_desc = "Completed"
+            status_text = "Completed"
 
         final_record = {
             "roll_no": roll_no,
@@ -1583,7 +1587,7 @@ def candidate_dashboard():
             "wrong": wrong_count,
             "deducted": total_deducted,
             "responses": saved_responses,
-            "status": status_desc
+            "status": status_text
         }
         try:
             save_student_score(final_record)
@@ -1591,6 +1595,9 @@ def candidate_dashboard():
             st.rerun()
         except Exception as e:
             st.error(f"Failed to record examination score: {e}")
+
+    # Disable question inputs if time expired or locked due to 2 tab-switch violations
+    inputs_disabled = time_expired or locked_due_to_violations
 
     # EXAM FORM
     with st.form("quiz_form"):
@@ -1628,19 +1635,18 @@ def candidate_dashboard():
             st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-        # Notice: Submit button remains active so candidate can always submit even when locked!
-        submit_btn = st.form_submit_button("✅ Finalize & Submit Examination", type="primary",
+        submit_btn = st.form_submit_button("✅ Finalize & Submit Examination", type="primary", disabled=time_expired,
                                            use_container_width=True)
 
         if submit_btn:
             if time_limit > 0:
-                final_elapsed = time.time() - (st.session_state.start_time or time.time())
+                final_elapsed = time.time() - st.session_state.start_time
                 if final_elapsed > (time_limit * 60) + 10:
-                    st.error("Submission marked as late due to time elapsed.")
-                    finalize_normal_exam(user_answers, is_late=True)
+                    st.error("Submission rejected. The examination window elapsed.")
+                    finalize_normal_exam(user_answers, is_late=True, is_violation=locked_due_to_violations)
                     return
 
-            finalize_normal_exam(user_answers, is_late=False)
+            finalize_normal_exam(user_answers, is_late=False, is_violation=locked_due_to_violations)
 
 
 # --- ROUTER ---
