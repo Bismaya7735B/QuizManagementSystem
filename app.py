@@ -2877,7 +2877,7 @@ def candidate_dashboard():
     js_roll_no = json.dumps(roll_no)
     start_ts_ms = int(st.session_state.start_time * 1000)
 
-    # ADVANCED PROCTORING COMPONENT (FORCES SUBMISSION ON 2 VIOLATIONS WITHOUT AUTO-SUBMITTING)
+    # ADVANCED PROCTORING COMPONENT
     proctor_component_code = f"""
     <div style="
         background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
@@ -2915,7 +2915,6 @@ def candidate_dashboard():
         const serverStartMs = {start_ts_ms};
         const timeLimitMinutes = {time_limit};
 
-        // 1. COUNTDOWN TIMER: PERSISTENT ACROSS PAGE REFRESHES
         const startKey = "quiz_start_time_" + rollNo;
         let storedStart = localStorage.getItem(startKey);
         let startTimeMs;
@@ -2957,21 +2956,28 @@ def candidate_dashboard():
         tick();
         const timerInterval = setInterval(tick, 1000);
 
-        // 2. STRIKE TRACKING (PERSISTENT VIA LOCALSTORAGE - DOES NOT RESET ON REFRESH)
         const strikeKey = "quiz_strikes_" + rollNo;
         let strikes = parseInt(localStorage.getItem(strikeKey) || "0", 10);
 
+        // SYNC UPDATED: Safely reload the Python backend context to know 2nd strike happened
         function syncStrikesToParent(strikeCount, forceReload = false) {{
             try {{
                 const targetWin = (window.parent && window.parent.location) ? window.parent : window;
                 const url = new URL(targetWin.location.href);
+                let changed = false;
                 if (url.searchParams.get("c_strikes") !== String(strikeCount)) {{
                     url.searchParams.set("c_strikes", String(strikeCount));
-                    if (forceReload) {{
+                    changed = true;
+                }}
+                
+                if (forceReload) {{
+                    if (changed) {{
                         targetWin.location.href = url.toString();
                     }} else {{
-                        targetWin.history.replaceState(null, "", url.toString());
+                        targetWin.location.reload();
                     }}
+                }} else if (changed) {{
+                    targetWin.history.replaceState(null, "", url.toString());
                 }}
             }} catch(e) {{}}
         }}
@@ -3120,9 +3126,7 @@ def candidate_dashboard():
                 if (strikes === 1) {{
                     strikes = 2;
                     localStorage.setItem(strikeKey, "2");
-                    updateProctorBadge();
-                    syncStrikesToParent(2, false);
-                    lockExamAndPromptSubmit();
+                    syncStrikesToParent(2, true); // <--- FORCE RELOADS BACKEND WITH C_STRIKES=2
                 }}
             }}
         }}
@@ -3136,10 +3140,10 @@ def candidate_dashboard():
                     strikes = 1;
                     localStorage.setItem(strikeKey, "1");
                     updateProctorBadge();
-                    syncStrikesToParent(1, false);
+                    syncStrikesToParent(1, false); // Just updates URL behind the scenes
                     showWarningModal(awaySecs);
                 }} else if (strikes >= 2) {{
-                    lockExamAndPromptSubmit();
+                    syncStrikesToParent(2, true); // Syncs backend
                 }}
             }}
         }}
@@ -3175,7 +3179,6 @@ def candidate_dashboard():
     """
     components.html(proctor_component_code, height=100)
 
-    # Standard Exam Form Submission
     def finalize_normal_exam(user_ans_dict, is_late=False, is_violation=False):
         score = 0.0
         correct_count = 0
@@ -3214,7 +3217,6 @@ def candidate_dashboard():
                     score -= penalty
                     total_deducted += penalty
 
-        # UPDATE 1: Clearly mark forced submissions for the Admin Score Analytics
         if is_violation:
             status_text = "🚨 Forced Submitted (Malpractice)"
         elif is_late:
