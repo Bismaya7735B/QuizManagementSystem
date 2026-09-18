@@ -1657,6 +1657,7 @@
 #         admin_dashboard()
 #     else:
 #         candidate_dashboard()
+
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -1892,7 +1893,7 @@ st.markdown("""
         font-weight: 600;
     }
 
-    /* Primary Buttons - Added primaryFormSubmit to target Streamlit forms */
+    /* Primary Buttons - target Streamlit forms */
     .stButton > button[kind="primary"],
     .stButton > button[kind="primaryFormSubmit"] {
         background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
@@ -1926,11 +1927,6 @@ supabase = get_supabase_client()
 
 # --- HELPER: COURSE & SEMESTER NORMALIZATION ---
 def normalize_course_name(raw_name: str) -> str:
-    """
-    Standardizes course and semester entries into a unified format.
-    E.g., 'Btech 5th sem', 'btech 5th sem', 'BTECH 5th Semester', 'B.Tech 5th Sem'
-    will all be grouped and stored as 'BTECH 5th Semester'.
-    """
     if not raw_name:
         return ""
     s = raw_name.strip()
@@ -1986,7 +1982,6 @@ def get_questions_by_branch(branch):
         res = supabase.table("questions").select("*").ilike("branch", norm).execute()
         if res.data:
             return res.data
-        # Fallback to match in-memory if variations exist in legacy records
         all_q = get_all_questions()
         return [q for q in all_q if normalize_course_name(q.get("branch", "")).lower() == norm.lower()]
     except Exception as e:
@@ -2135,7 +2130,6 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
             "Section": query_params.get("c_section", ""),
             "Branch": query_params.get("c_branch", "")
         }
-        # Persist and restore the start timestamp across page reloads
         saved_start = query_params.get("c_start_time")
         if saved_start:
             try:
@@ -2175,7 +2169,6 @@ def login_screen():
 
     tab1, tab2 = st.tabs(["👨‍🎓 Candidate Access", "🔐 Administrator Portal"])
 
-    # 1. CANDIDATE ACCESS
     with tab1:
         candidate_subtab1, candidate_subtab2 = st.tabs([
             "🚀 Take Assessment", 
@@ -2202,7 +2195,6 @@ def login_screen():
                 submit_student = st.form_submit_button("🚀 Access Assessment", type="primary", use_container_width=True)
 
                 if submit_student:
-                    # Enforce that every candidate enters all details
                     missing_fields = []
                     if not name.strip():
                         missing_fields.append("Full Name")
@@ -2245,7 +2237,6 @@ def login_screen():
                                     "Branch": normalized_branch
                                 }
 
-                                # Persist candidate session parameters in query parameters
                                 st.query_params["session_role"] = "candidate"
                                 st.query_params["session_user"] = clean_roll
                                 st.query_params["c_name"] = clean_name
@@ -2306,7 +2297,6 @@ def login_screen():
                             st.query_params["c_branch"] = clean_branch
                             st.rerun()
 
-    # 2. ADMIN LOGIN
     with tab2:
         st.markdown(
             "<p style='font-size: 0.95rem; color: #475569; margin-bottom: 12px;'>Authorized instructor and administrator access only.</p>",
@@ -2355,11 +2345,9 @@ def admin_dashboard():
     ])
 
     questions = get_all_questions()
-    # Normalize and group existing courses to prevent duplicate entries
     existing_branches = sorted(list(set([normalize_course_name(q["branch"]) for q in questions if q.get("branch")])))
     scores_data = get_all_scores()
 
-    # 1. VIEW RESULTS & PERFORMANCE
     with tab1:
         now_str = datetime.now().strftime("%I:%M:%S %p")
         c_head1, c_head2 = st.columns([3, 1])
@@ -2418,7 +2406,6 @@ def admin_dashboard():
                         except Exception as e:
                             st.error(f"Database error: {e}")
 
-    # 2. CREATE QUESTION
     with tab2:
         st.subheader("Create Assessment Item")
         with st.form("add_question_form"):
@@ -2483,7 +2470,6 @@ def admin_dashboard():
                         except Exception as e:
                             st.error(f"Database error: {e}")
 
-    # 3. VIEW/EDIT QUESTIONS
     with tab3:
         st.subheader("Manage Existing Questions")
         if not existing_branches:
@@ -2564,7 +2550,6 @@ def admin_dashboard():
                                 except Exception as e:
                                     st.error(f"Database error: {e}")
 
-    # 4. QUIZ SETTINGS & PASSKEY
     with tab4:
         st.subheader("Quiz Passkeys & Time Window Configurations")
         if not existing_branches:
@@ -2609,7 +2594,6 @@ def admin_dashboard():
                 df_cfg = pd.DataFrame(formatted_cfg).drop_duplicates(subset=["Course / Branch"])
                 st.dataframe(df_cfg, use_container_width=True)
 
-    # 5. DANGER ZONE
     with tab5:
         st.subheader("Administrative Danger Zone")
         if existing_branches:
@@ -2651,7 +2635,6 @@ def candidate_dashboard():
     student_branch = normalize_course_name(raw_student_branch)
     roll_no = st.session_state.user_id
 
-    # Restore or initialize start_time cleanly to ensure it never resets on page refresh
     if st.session_state.start_time is None:
         saved_start = st.query_params.get("c_start_time")
         if saved_start:
@@ -2681,16 +2664,19 @@ def candidate_dashboard():
     # IF QUIZ ALREADY SUBMITTED: SHOW RESULT SCREEN & FULL REVIEW
     # -------------------------------------------------------------
     if student_record is not None:
-        is_violation = ("Tab Switch" in str(student_record.get("status", "")))
+        status_str = str(student_record.get("status", ""))
+        is_violation = ("Tab Switch" in status_str or "Forced Submitted" in status_str or "Malpractice" in status_str)
 
         if is_violation:
+            # ALARMING BANNER FOR MALPRACTICE DETECTED
             st.markdown("""
-                <div class="warning-card">
-                    <div style="font-size: 2rem; margin-bottom: 4px;">🚨</div>
-                    <h3 style="color: #991b1b; margin: 0 0 6px 0;">Assessment Completed (Proctoring Limit Reached)</h3>
-                    <p style="margin: 0; font-size: 0.95rem; line-height: 1.5;">
-                        <b>Proctoring Action Logged:</b> You triggered 2 tab-switch violations during this examination. 
-                        Your examination inputs were locked and your responses were finalized and submitted.
+                <div style="background: linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%); border: 2px solid #ef4444; border-radius: 16px; padding: 24px; text-align: center; margin-bottom: 24px; color: white; box-shadow: 0 10px 15px -3px rgba(220, 38, 38, 0.4);">
+                    <div style="font-size: 3rem; margin-bottom: 8px;">🚨</div>
+                    <h2 style="color: #ffffff; margin: 0 0 8px 0; font-weight: 800;">FORCED SUBMISSION: MALPRACTICE DETECTED</h2>
+                    <p style="font-size: 1.05rem; margin: 0; line-height: 1.6; color: #fca5a5;">
+                        <b>Proctoring Action Logged:</b> You have violated the proctoring shield by repeatedly navigating away from the examination window. 
+                        Due to suspected malpractice, your examination was immediately locked and <b>Forced Submitted</b>. 
+                        <br><br>This incident has been flagged for the administrator.
                     </p>
                 </div>
             """, unsafe_allow_html=True)
@@ -2859,7 +2845,6 @@ def candidate_dashboard():
     time_limit = branch_config.get("time_limit", 30)
     time_expired = False
 
-    # Calculate elapsed and remaining time accurately from persisted start timestamp
     if time_limit > 0:
         elapsed_seconds = int(time.time() - st.session_state.start_time)
         remaining_seconds = max(0, int((time_limit * 60) - elapsed_seconds))
@@ -2870,7 +2855,6 @@ def candidate_dashboard():
     else:
         remaining_seconds = 999999
 
-    # Check for tab-switch violations from persistent query parameters
     try:
         current_strikes = int(st.query_params.get("c_strikes", 0))
     except Exception:
@@ -2882,7 +2866,7 @@ def candidate_dashboard():
         st.markdown("""
             <div class="warning-card">
                 <div style="font-size: 2rem; margin-bottom: 4px;">🚨</div>
-                <h3 style="color: #991b1b; margin: 0 0 6px 0;">Examination Locked: 2 Tab-Switch Violations Recorded</h3>
+                <h3 style="color: #991b1b; margin: 0 0 6px 0;">Examination Locked: Malpractice Detected</h3>
                 <p style="margin: 0; font-size: 0.95rem; line-height: 1.5;">
                     You switched tabs or left the examination window 2 times after being warned. 
                     <b>All question inputs are permanently locked. You are required to submit your examination now using the submit button below.</b>
@@ -2977,7 +2961,6 @@ def candidate_dashboard():
         const strikeKey = "quiz_strikes_" + rollNo;
         let strikes = parseInt(localStorage.getItem(strikeKey) || "0", 10);
 
-        // Synchronize with URL query parameters
         function syncStrikesToParent(strikeCount, forceReload = false) {{
             try {{
                 const targetWin = (window.parent && window.parent.location) ? window.parent : window;
@@ -3035,7 +3018,6 @@ def candidate_dashboard():
             }} catch(e) {{}}
         }}
 
-        // Warning Modal on Strike 1
         function showWarningModal(awayDuration) {{
             playAlertTone();
             const targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
@@ -3071,7 +3053,6 @@ def candidate_dashboard():
             }}
         }}
 
-        // Lock Exam Modal on Strike 2 (Requires Candidate to Submit)
         function lockExamAndPromptSubmit() {{
             playAlertTone();
             const targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
@@ -3079,7 +3060,6 @@ def candidate_dashboard():
             const existingWarn = targetDoc.getElementById("proctor-warning-modal-overlay");
             if (existingWarn) existingWarn.remove();
 
-            // Disable all interactive radio / checkbox / input elements
             const inputs = targetDoc.querySelectorAll('input:not([type="submit"]), select, textarea');
             inputs.forEach(el => {{ el.disabled = true; }});
 
@@ -3111,7 +3091,6 @@ def candidate_dashboard():
                     forceBtn.onclick = function() {{
                         lockOverlay.remove();
                         
-                        // Look for the submit button by its text or specific Streamlit attributes
                         const allButtons = Array.from(targetDoc.querySelectorAll('button'));
                         const submitButton = allButtons.find(btn => 
                             btn.innerText.includes('Finalize & Submit') || 
@@ -3120,7 +3099,7 @@ def candidate_dashboard():
                         );
 
                         if (submitButton) {{
-                            submitButton.click(); // Successfully trigger backend submission
+                            submitButton.click(); 
                         }} else {{
                             syncStrikesToParent(2, true);
                         }}
@@ -3129,7 +3108,6 @@ def candidate_dashboard():
             }}
         }}
 
-        // If page is refreshed while on strike 2, enforce the locked modal and badge
         if (strikes >= 2) {{
             lockExamAndPromptSubmit();
         }}
@@ -3166,7 +3144,6 @@ def candidate_dashboard():
             }}
         }}
 
-        // Visibility & focus listeners
         document.addEventListener("visibilitychange", function() {{
             if (document.hidden) {{
                 handleTabDeparture();
@@ -3237,12 +3214,13 @@ def candidate_dashboard():
                     score -= penalty
                     total_deducted += penalty
 
+        # UPDATE 1: Clearly mark forced submissions for the Admin Score Analytics
         if is_violation:
-            status_text = "Submitted (2 Tab Switch Violations)"
+            status_text = "🚨 Forced Submitted (Malpractice)"
         elif is_late:
-            status_text = "Rejected (Late Submission)"
+            status_text = "⚠️ Rejected (Late Submission)"
         else:
-            status_text = "Completed"
+            status_text = "✅ Completed"
 
         final_record = {
             "roll_no": roll_no,
@@ -3263,10 +3241,8 @@ def candidate_dashboard():
         except Exception as e:
             st.error(f"Failed to record examination score: {e}")
 
-    # Disable question inputs if time expired or locked due to 2 tab-switch violations
     inputs_disabled = time_expired or locked_due_to_violations
 
-    # EXAM FORM
     with st.form("quiz_form"):
         user_answers = {}
         for i, q in enumerate(my_questions):
