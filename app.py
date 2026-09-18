@@ -1681,13 +1681,11 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
 
-    /* Global Base Styling */
     html, body, [class*="css"] {
         font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
         color: #0f172a;
     }
 
-    /* Dynamic Modern Mesh Gradient Background */
     .stApp {
         background-color: #f8fafc;
         background-image: 
@@ -1697,7 +1695,6 @@ st.markdown("""
         background-attachment: fixed;
     }
 
-    /* Headings */
     h1, h2, h3, h4 {
         font-family: 'Outfit', sans-serif !important;
         font-weight: 700 !important;
@@ -1705,7 +1702,16 @@ st.markdown("""
         color: #0f172a;
     }
 
-    /* Enterprise Hero Banner */
+    /* Hide the backend violation flag input seamlessly */
+    div[data-testid="stTextInput"]:has(input[aria-label="violation_flag_input"]) {
+        display: none !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        opacity: 0 !important;
+        visibility: hidden !important;
+    }
+
     .hero-banner {
         background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
         border-radius: 20px;
@@ -1714,34 +1720,20 @@ st.markdown("""
         text-align: center;
         margin-bottom: 28px;
         box-shadow: 0 20px 25px -5px rgba(49, 46, 129, 0.2), 0 8px 10px -6px rgba(49, 46, 129, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.12);
         position: relative;
         overflow: hidden;
     }
     .hero-banner::after {
         content: "";
         position: absolute;
-        top: -50%;
-        left: -50%;
-        width: 200%;
-        height: 200%;
+        top: -50%; left: -50%;
+        width: 200%; height: 200%;
         background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 60%);
         pointer-events: none;
     }
-    .hero-title {
-        font-size: 2.2rem;
-        font-weight: 800;
-        margin: 0;
-        color: #ffffff !important;
-    }
-    .hero-subtitle {
-        font-size: 0.95rem;
-        color: #c7d2fe;
-        margin-top: 6px;
-        font-weight: 400;
-    }
+    .hero-title { font-size: 2.2rem; font-weight: 800; margin: 0; color: #ffffff !important; }
+    .hero-subtitle { font-size: 0.95rem; color: #c7d2fe; margin-top: 6px; font-weight: 400; }
 
-    /* Question Box */
     .question-box {
         background: #ffffff;
         padding: 24px;
@@ -1757,92 +1749,35 @@ st.markdown("""
         box-shadow: 0 12px 20px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.03);
     }
 
-    .question-text-content {
-        font-size: 1.05rem;
-        font-weight: 600;
-        color: #1e293b;
-        white-space: pre-wrap;
-        word-break: break-word;
-        margin-bottom: 12px;
-        line-height: 1.6;
-    }
+    .question-text-content { font-size: 1.05rem; font-weight: 600; color: #1e293b; white-space: pre-wrap; word-break: break-word; margin-bottom: 12px; line-height: 1.6; }
 
-    /* Review Card Variations */
-    .review-box {
-        background: #ffffff;
-        padding: 22px 24px;
-        border-radius: 16px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04);
-        margin-bottom: 20px;
-        border: 1px solid #e2e8f0;
-        transition: transform 0.15s ease;
-    }
-    .review-box-correct {
-        border-left: 6px solid #10b981;
-        background: linear-gradient(to right, #f0fdf4 0%, #ffffff 15%);
-    }
-    .review-box-wrong {
-        border-left: 6px solid #ef4444;
-        background: linear-gradient(to right, #fef2f2 0%, #ffffff 15%);
-    }
-    .review-box-skipped {
-        border-left: 6px solid #94a3b8;
-        background: linear-gradient(to right, #f8fafc 0%, #ffffff 15%);
-    }
+    .review-box { background: #ffffff; padding: 22px 24px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04); margin-bottom: 20px; border: 1px solid #e2e8f0; }
+    .review-box-correct { border-left: 6px solid #10b981; background: linear-gradient(to right, #f0fdf4 0%, #ffffff 15%); }
+    .review-box-wrong { border-left: 6px solid #ef4444; background: linear-gradient(to right, #fef2f2 0%, #ffffff 15%); }
+    .review-box-skipped { border-left: 6px solid #94a3b8; background: linear-gradient(to right, #f8fafc 0%, #ffffff 15%); }
 
-    /* Badges & Pills */
-    .badge-mark, .badge-neg, .badge-correct, .badge-wrong, .badge-unattempted {
-        display: inline-block;
-        padding: 4px 10px;
-        border-radius: 9999px;
-        font-size: 0.75rem;
-        font-weight: 700;
-        margin-left: 6px;
-        vertical-align: middle;
-    }
+    .badge-mark, .badge-neg, .badge-correct, .badge-wrong, .badge-unattempted { display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; margin-left: 6px; vertical-align: middle; }
     .badge-mark { background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; text-transform: uppercase; letter-spacing: 0.03em; }
     .badge-neg { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
     .badge-correct { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
     .badge-wrong { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
     .badge-unattempted { background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; }
 
-    /* Option Review Rows */
-    .option-item {
-        padding: 10px 14px;
-        border-radius: 10px;
-        margin-bottom: 8px;
-        font-size: 0.95rem;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        border: 1px solid #e2e8f0;
-    }
+    .option-item { padding: 10px 14px; border-radius: 10px; margin-bottom: 8px; font-size: 0.95rem; display: flex; align-items: center; justify-content: space-between; border: 1px solid #e2e8f0; }
     .option-default { background-color: #f8fafc; color: #334155; }
     .option-correct-key { background-color: #f0fdf4; border-color: #86efac; color: #166534; font-weight: 600; }
     .option-user-wrong { background-color: #fef2f2; border-color: #fca5a5; color: #991b1b; font-weight: 600; }
 
-    /* Primary Buttons - target Streamlit forms */
-    .stButton > button[kind="primary"],
-    .stButton > button[kind="primaryFormSubmit"] {
-        background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
-        color: #ffffff !important;
-        border: none !important;
-        border-radius: 12px !important;
-        padding: 12px 24px !important;
-        font-weight: 600 !important;
-        font-size: 1rem !important;
-        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25) !important;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    .stButton > button[kind="primary"], .stButton > button[kind="primaryFormSubmit"] {
+        background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important; color: #ffffff !important; border: none !important; border-radius: 12px !important; padding: 12px 24px !important; font-weight: 600 !important; font-size: 1rem !important; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25) !important; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
     }
-    .stButton > button[kind="primary"]:hover,
-    .stButton > button[kind="primaryFormSubmit"]:hover {
-        transform: translateY(-1px) !important;
-        box-shadow: 0 6px 18px rgba(79, 70, 229, 0.35) !important;
+    .stButton > button[kind="primary"]:hover, .stButton > button[kind="primaryFormSubmit"]:hover {
+        transform: translateY(-1px) !important; box-shadow: 0 6px 18px rgba(79, 70, 229, 0.35) !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- SUPABASE CREDENTIALS DIRECT SETUP ---
+# --- SUPABASE CREDENTIALS ---
 SUPABASE_URL = "https://jbayaagktyvesjwwbeha.supabase.co"
 SUPABASE_KEY = "sb_publishable_8PbBG3BVlMXTt5bIzY9HpQ_2h1YNAYt"
 
@@ -1852,17 +1787,11 @@ def get_supabase_client() -> Client:
 
 supabase = get_supabase_client()
 
-
-# --- HELPER: COURSE & SEMESTER NORMALIZATION ---
+# --- HELPER FUNCTIONS ---
 def normalize_course_name(raw_name: str) -> str:
     if not raw_name: return ""
     s = raw_name.strip()
-    degree_map = {
-        r'\bb\.?\s*tech\b': 'BTECH', r'\bm\.?\s*tech\b': 'MTECH', r'\bb\.?\s*c\.?\s*a\.?\b': 'BCA',
-        r'\bm\.?\s*c\.?\s*a\.?\b': 'MCA', r'\bb\.?\s*sc\b': 'BSC', r'\bm\.?\s*sc\b': 'MSC',
-        r'\bb\.?\s*b\.?\s*a\.?\b': 'BBA', r'\bm\.?\s*b\.?\s*a\.?\b': 'MBA', r'\bb\.?\s*com\b': 'BCOM',
-        r'\bm\.?\s*com\b': 'MCOM',
-    }
+    degree_map = { r'\bb\.?\s*tech\b': 'BTECH', r'\bm\.?\s*tech\b': 'MTECH', r'\bb\.?\s*c\.?\s*a\.?\b': 'BCA', r'\bm\.?\s*c\.?\s*a\.?\b': 'MCA', r'\bb\.?\s*sc\b': 'BSC', r'\bm\.?\s*sc\b': 'MSC', r'\bb\.?\s*b\.?\s*a\.?\b': 'BBA', r'\bm\.?\s*b\.?\s*a\.?\b': 'MBA', r'\bb\.?\s*com\b': 'BCOM', r'\bm\.?\s*com\b': 'MCOM' }
     sem_match = re.search(r'(\d+)(?:st|nd|rd|th)?\s*(?:sem(?:ester)?)?', s, re.IGNORECASE)
     sem_num = sem_match.group(1) if sem_match else None
     detected_degree = None
@@ -1877,10 +1806,9 @@ def normalize_course_name(raw_name: str) -> str:
     cleaned = re.sub(r'\bsem\b', 'Semester', s, flags=re.IGNORECASE)
     return re.sub(r'\s+', ' ', cleaned).strip()
 
-# --- DATABASE HELPER FUNCTIONS ---
 def get_all_questions():
     try: return supabase.table("questions").select("*").execute().data or []
-    except Exception: return []
+    except: return []
 
 def get_questions_by_branch(branch):
     norm = normalize_course_name(branch)
@@ -1888,7 +1816,7 @@ def get_questions_by_branch(branch):
         res = supabase.table("questions").select("*").ilike("branch", norm).execute()
         if res.data: return res.data
         return [q for q in get_all_questions() if normalize_course_name(q.get("branch", "")).lower() == norm.lower()]
-    except Exception: return []
+    except: return []
 
 def add_question(q_data):
     q_data["branch"] = normalize_course_name(q_data.get("branch", ""))
@@ -1903,34 +1831,32 @@ def delete_question(q_id):
 
 def get_all_settings():
     try: return supabase.table("settings").select("*").execute().data or []
-    except Exception: return []
+    except: return []
 
 def get_branch_settings(branch):
     norm = normalize_course_name(branch)
     try:
         res = supabase.table("settings").select("*").ilike("branch", norm).execute()
-        if res.data and len(res.data) > 0:
-            return {"time_limit": res.data[0].get("time_limit", 30), "passkey": str(res.data[0].get("passkey") or "").strip()}
+        if res.data and len(res.data) > 0: return {"time_limit": res.data[0].get("time_limit", 30), "passkey": str(res.data[0].get("passkey") or "").strip()}
         for cfg in get_all_settings():
             if normalize_course_name(cfg.get("branch", "")).lower() == norm.lower():
                 return {"time_limit": cfg.get("time_limit", 30), "passkey": str(cfg.get("passkey") or "").strip()}
-    except Exception: pass
+    except: pass
     return {"time_limit": 30, "passkey": ""}
 
 def save_branch_settings(branch, time_limit, passkey):
-    norm = normalize_course_name(branch)
-    payload = {"branch": norm, "time_limit": int(time_limit), "passkey": str(passkey).strip()}
+    payload = {"branch": normalize_course_name(branch), "time_limit": int(time_limit), "passkey": str(passkey).strip()}
     supabase.table("settings").upsert(payload).execute()
 
 def get_all_scores():
     try: return supabase.table("scores").select("*").order("score", desc=True).execute().data or []
-    except Exception: return []
+    except: return []
 
 def get_student_score(roll_no):
     try:
         res = supabase.table("scores").select("*").eq("roll_no", roll_no.strip().upper()).execute()
         if res.data and len(res.data) > 0: return res.data[0]
-    except Exception: pass
+    except: pass
     return None
 
 def get_branch_scores(branch):
@@ -1939,7 +1865,7 @@ def get_branch_scores(branch):
         res = supabase.table("scores").select("*").ilike("branch", norm).order("score", desc=True).execute()
         if res.data: return res.data
         return [s for s in get_all_scores() if normalize_course_name(s.get("branch", "")).lower() == norm.lower()]
-    except Exception: return []
+    except: return []
 
 def save_student_score(score_record):
     score_record["branch"] = normalize_course_name(score_record.get("branch", ""))
@@ -1964,7 +1890,7 @@ def parse_saved_responses(responses_data):
     if isinstance(responses_data, dict): return responses_data
     if isinstance(responses_data, str):
         try: return json.loads(responses_data)
-        except Exception: return {}
+        except: return {}
     return {}
 
 # --- PERSISTENT SESSION RESTORATION ---
@@ -1982,16 +1908,11 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
         st.session_state.logged_in = True
         st.session_state.user_id = saved_user
         st.session_state.role = "candidate"
-        st.session_state.student_info = {
-            "Name": query_params.get("c_name", "Candidate"),
-            "Roll No": saved_user,
-            "Section": query_params.get("c_section", ""),
-            "Branch": query_params.get("c_branch", "")
-        }
+        st.session_state.student_info = {"Name": query_params.get("c_name", "Candidate"), "Roll No": saved_user, "Section": query_params.get("c_section", ""), "Branch": query_params.get("c_branch", "")}
         saved_start = query_params.get("c_start_time")
         if saved_start:
             try: st.session_state.start_time = float(saved_start)
-            except Exception: st.session_state.start_time = time.time()
+            except: st.session_state.start_time = time.time()
         else:
             st.session_state.start_time = time.time()
     else:
@@ -2000,8 +1921,8 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
         st.session_state.role = ""
         st.session_state.student_info = {}
 
-if "start_time" not in st.session_state:
-    st.session_state.start_time = None
+if "start_time" not in st.session_state: st.session_state.start_time = None
+if "v_flag_input" not in st.session_state: st.session_state.v_flag_input = "0"
 
 def logout():
     st.session_state.logged_in = False
@@ -2009,58 +1930,39 @@ def logout():
     st.session_state.role = ""
     st.session_state.student_info = {}
     st.session_state.start_time = None
+    st.session_state.v_flag_input = "0"
     st.query_params.clear()
 
 
 # --- LOGIN SCREEN ---
 def login_screen():
-    st.markdown("""
-    <div class="hero-banner">
-        <div style="font-size: 2.8rem; margin-bottom: 8px;">🎓</div>
-        <h1 class="hero-title">Pro Quiz Portal</h1>
-        <p class="hero-subtitle">Enterprise Assessment & Examination Engine</p>
-    </div>
-    """, unsafe_allow_html=True)
-
+    st.markdown("""<div class="hero-banner"><div style="font-size: 2.8rem; margin-bottom: 8px;">🎓</div><h1 class="hero-title">Pro Quiz Portal</h1><p class="hero-subtitle">Enterprise Assessment & Examination Engine</p></div>""", unsafe_allow_html=True)
     tab1, tab2 = st.tabs(["👨‍🎓 Candidate Access", "🔐 Administrator Portal"])
 
     with tab1:
         candidate_subtab1, candidate_subtab2 = st.tabs(["🚀 Take Assessment", "🔍 View Past Assessment & Solutions"])
-
         with candidate_subtab1:
-            st.markdown("<p style='font-size: 0.95rem; color: #475569; margin-bottom: 12px;'>Enter all candidate details and authorized passkey to begin or resume your examination.</p>", unsafe_allow_html=True)
             with st.form("student_login_form"):
                 col1, col2 = st.columns(2)
-                with col1:
-                    name = st.text_input("Full Name", placeholder="e.g. John Doe")
-                    rollno = st.text_input("Roll Number", placeholder="e.g. 23BCA042")
-                with col2:
-                    section = st.text_input("Section", placeholder="e.g. Section A")
-                    branch = st.text_input("Course & Semester", placeholder="e.g. BTech 5th Sem")
-
+                with col1: name = st.text_input("Full Name", placeholder="e.g. John Doe"); rollno = st.text_input("Roll Number", placeholder="e.g. 23BCA042")
+                with col2: section = st.text_input("Section", placeholder="e.g. Section A"); branch = st.text_input("Course & Semester", placeholder="e.g. BTech 5th Sem")
                 student_passkey = st.text_input("🔑 Quiz Passkey (Issued by Instructor)", type="password", placeholder="Enter authorization passkey")
-
-                st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
                 submit_student = st.form_submit_button("🚀 Access Assessment", type="primary", use_container_width=True)
 
                 if submit_student:
                     missing_fields = [f for f, v in zip(["Full Name", "Roll Number", "Section", "Course & Semester", "Quiz Passkey"], [name, rollno, section, branch, student_passkey]) if not v.strip()]
-                    if missing_fields:
-                        st.error(f"⚠️ Mandatory candidate information missing. Please enter: {', '.join(missing_fields)}.")
+                    if missing_fields: st.error(f"⚠️ Mandatory candidate information missing. Please enter: {', '.join(missing_fields)}.")
                     else:
                         normalized_branch = normalize_course_name(branch)
                         branch_questions = get_questions_by_branch(normalized_branch)
-
-                        if not branch_questions:
-                            st.error(f"❌ No active quiz found for '{normalized_branch}'. Please verify the course and semester.")
+                        if not branch_questions: st.error(f"❌ No active quiz found for '{normalized_branch}'. Please verify the course and semester.")
                         else:
                             branch_config = get_branch_settings(normalized_branch)
                             required_passkey = branch_config.get("passkey", "")
                             clean_roll = rollno.strip().upper()
                             existing_score = get_student_score(clean_roll)
 
-                            if required_passkey and student_passkey.strip() != required_passkey and not existing_score:
-                                st.error("❌ Invalid Quiz Passkey. Please verify with your instructor.")
+                            if required_passkey and student_passkey.strip() != required_passkey and not existing_score: st.error("❌ Invalid Quiz Passkey. Please verify with your instructor.")
                             else:
                                 st.session_state.logged_in = True
                                 st.session_state.role = "candidate"
@@ -2071,26 +1973,20 @@ def login_screen():
                                 st.query_params["c_name"] = name.strip()
                                 st.query_params["c_section"] = section.strip()
                                 st.query_params["c_branch"] = normalized_branch
-
                                 if not existing_score:
-                                    current_ts = time.time()
-                                    st.session_state.start_time = current_ts
-                                    st.query_params["c_start_time"] = str(current_ts)
-                                    st.query_params["c_strikes"] = "0"
+                                    st.session_state.start_time = time.time()
+                                    st.query_params["c_start_time"] = str(st.session_state.start_time)
                                 st.rerun()
 
         with candidate_subtab2:
-            st.markdown("<p style='font-size: 0.95rem; color: #475569; margin-bottom: 12px;'>Review your score, submitted questions, and solutions anytime without needing a passkey.</p>", unsafe_allow_html=True)
             with st.form("student_history_form"):
                 col_h1, col_h2 = st.columns(2)
                 with col_h1: hist_roll = st.text_input("Roll Number", placeholder="e.g. 23BCA042", key="hist_roll")
                 with col_h2: hist_branch = st.text_input("Course & Semester", placeholder="e.g. BTech 5th Sem", key="hist_branch")
-                st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
                 submit_history = st.form_submit_button("🔍 Retrieve My Answer Sheet", type="primary", use_container_width=True)
 
                 if submit_history:
-                    if not hist_roll.strip() or not hist_branch.strip():
-                        st.error("⚠️ Mandatory information missing. Please enter Roll Number and Course.")
+                    if not hist_roll.strip() or not hist_branch.strip(): st.error("⚠️ Mandatory information missing. Please enter Roll Number and Course.")
                     else:
                         clean_roll = hist_roll.strip().upper()
                         clean_branch = normalize_course_name(hist_branch)
@@ -2109,13 +2005,10 @@ def login_screen():
                             st.rerun()
 
     with tab2:
-        st.markdown("<p style='font-size: 0.95rem; color: #475569; margin-bottom: 12px;'>Authorized instructor and administrator access only.</p>", unsafe_allow_html=True)
         with st.form("admin_login_form"):
             username = st.text_input("Admin Username", placeholder="Enter username")
             password = st.text_input("Admin Password", type="password", placeholder="Enter password")
-            st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
             submit_admin = st.form_submit_button("Authenticate & Log In", type="primary", use_container_width=True)
-
             if submit_admin:
                 if username == "admin" and password == "admin":
                     st.session_state.logged_in = True
@@ -2124,8 +2017,7 @@ def login_screen():
                     st.query_params["session_role"] = "admin"
                     st.query_params["session_user"] = "admin"
                     st.rerun()
-                else:
-                    st.error("❌ Invalid administrative credentials.")
+                else: st.error("❌ Invalid administrative credentials.")
 
 
 # --- ADMIN DASHBOARD ---
@@ -2139,8 +2031,7 @@ def admin_dashboard():
             st.toast("Updated with latest database records!", icon="🔄")
             time.sleep(0.3)
             st.rerun()
-    with col3:
-        st.button("🚪 Log Out", on_click=logout, use_container_width=True)
+    with col3: st.button("🚪 Log Out", on_click=logout, use_container_width=True)
 
     st.write("---")
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Score Analytics", "➕ Add Question", "✏️ Question Bank", "🔐 Passkey & Limits", "🗑️ Data Management"])
@@ -2164,10 +2055,7 @@ def admin_dashboard():
         m2.metric("Average Score", f"{avg_score:.2f}")
         m3.metric("Participating Courses", f"{active_courses}")
 
-        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-
-        if not scores_data:
-            st.info("ℹ️ No examination records submitted yet.")
+        if not scores_data: st.info("ℹ️ No examination records submitted yet.")
         else:
             results_list = [{"Roll No": item["roll_no"], "Candidate Name": item["name"], "Course": normalize_course_name(item.get("branch", "")), "Final Score": float(item.get("score", 0)), "Correct": item.get("correct", 0), "Incorrect": item.get("wrong", 0), "Status": item.get("status", "Completed")} for item in scores_data]
             df = pd.DataFrame(results_list)
@@ -2197,15 +2085,13 @@ def admin_dashboard():
             q_text = st.text_area("Question Stem / Description", placeholder="Enter question text or code snippet...")
             col_a, col_b = st.columns(2)
             with col_a: q_type = st.selectbox("Question Classification", ["MCQ", "MSQ", "Numerical"])
-            with col_b: marks = st.selectbox("Assigned Marks", [1, 2], help="MCQ deducts 25% penalty.")
+            with col_b: marks = st.selectbox("Assigned Marks", [1, 2])
             q_unit = st.text_input("Unit of Measure (Optional - e.g., ns, kg, m/s, %)") if q_type == "Numerical" else ""
-            options_input = st.text_input("Answer Choices (Comma-separated for MCQ/MSQ; leave blank for Numerical)", placeholder="Option A, Option B, Option C, Option D")
+            options_input = st.text_input("Answer Choices (Comma-separated for MCQ/MSQ)", placeholder="Option A, Option B, Option C, Option D")
             correct_input = st.text_input("Key / Correct Answer", placeholder="Correct answer here")
 
-            st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
             if st.form_submit_button("💾 Save Question to Bank", type="primary"):
-                if not q_text or not correct_input or not target_branch:
-                    st.error("Course & Semester, question text, and correct answer are mandatory.")
+                if not q_text or not correct_input or not target_branch: st.error("Course & Semester, question text, and correct answer are mandatory.")
                 else:
                     options = [opt.strip() for opt in options_input.split(",")] if options_input else []
                     is_valid = True
@@ -2228,13 +2114,11 @@ def admin_dashboard():
 
     with tab3:
         st.subheader("Manage Existing Questions")
-        if not existing_branches:
-            st.info("ℹ️ No questions currently populated in the database.")
+        if not existing_branches: st.info("ℹ️ No questions currently populated in the database.")
         else:
             branch_to_edit = st.selectbox("Filter Question Bank by Course", existing_branches)
             branch_questions = [q for q in questions if normalize_course_name(q.get("branch", "")).lower() == branch_to_edit.lower()]
-            if not branch_questions:
-                st.info("No items found for this selected course.")
+            if not branch_questions: st.info("No items found for this selected course.")
             else:
                 for idx, q in enumerate(branch_questions):
                     with st.expander(f"Item #{idx + 1}: {q['text'][:65]}... ({q['type']} | {q['marks']} Marks)"):
@@ -2280,15 +2164,13 @@ def admin_dashboard():
 
     with tab4:
         st.subheader("Quiz Passkeys & Time Window Configurations")
-        if not existing_branches:
-            st.info("Please create questions for a course before configuring policies.")
+        if not existing_branches: st.info("Please create questions for a course before configuring policies.")
         else:
             branch_for_timer = st.selectbox("Target Course / Branch", existing_branches)
             current_settings = get_branch_settings(branch_for_timer)
             with st.form("settings_passkey_form"):
                 time_limit = st.number_input("Examination Time Limit (in minutes; enter 0 for unlimited)", min_value=0, value=current_settings.get("time_limit", 30))
                 passkey_input = st.text_input("🔑 Examination Access Passkey (Students must enter this to start)", value=current_settings.get("passkey", ""), placeholder="e.g. BTECH-SPRING-2026")
-                st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
                 if st.form_submit_button("🔐 Apply Security Settings", type="primary"):
                     try:
                         save_branch_settings(branch_for_timer, time_limit, passkey_input)
@@ -2474,7 +2356,7 @@ def candidate_dashboard():
         return
 
     # -------------------------------------------------------------
-    # TAKING THE QUIZ
+    # TAKING THE QUIZ & BULLETPROOF PROCTORING 
     # -------------------------------------------------------------
     branch_config = get_branch_settings(student_branch)
     time_limit = branch_config.get("time_limit", 30)
@@ -2486,22 +2368,12 @@ def candidate_dashboard():
         if remaining_seconds <= 0:
             st.error("⏱️ Allocated examination time has expired. Question inputs are locked.")
             time_expired = True
-    else:
-        remaining_seconds = 999999
 
-    try: current_strikes = int(st.query_params.get("c_strikes", 0))
-    except Exception: current_strikes = 0
-
-    locked_due_to_violations = (current_strikes >= 2)
-
-    # -------------------------------------------------------------
-    # BULLETPROOF PROCTORING SCRIPT
-    # Runs natively in an iframe, injects massive warning modal into parent window
-    # On 2nd strike, forces parent URL to update and reload to ensure Python syncs correctly
-    # -------------------------------------------------------------
     js_roll_no = json.dumps(roll_no)
     start_ts_ms = int(st.session_state.start_time * 1000)
 
+    # 1. THE BULLETPROOF JAVASCRIPT INJECTION 
+    # Directly accesses DOM, tracks localStorage, pushes violation flag to Python, clicks submit automatically.
     proctor_component_code = f"""
     <div style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); border-radius: 14px; padding: 14px 20px; text-align: center; color: #ffffff; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); border: 1px solid rgba(255, 255, 255, 0.1); margin-bottom: 12px; font-family: 'Plus Jakarta Sans', sans-serif;">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
@@ -2517,6 +2389,30 @@ def candidate_dashboard():
     
     <script>
     try {{
+        // TIMER LOGIC - Completely independent so it never fails
+        const timerUI = document.getElementById("quiz-countdown");
+        const serverStartMs = {start_ts_ms};
+        const timeLimitMinutes = {time_limit};
+        const startKey = "quiz_start_time_" + {js_roll_no};
+        
+        let startTimeMs = localStorage.getItem(startKey);
+        if(!startTimeMs) {{ startTimeMs = serverStartMs; localStorage.setItem(startKey, startTimeMs); }}
+
+        setInterval(() => {{
+            if(!timerUI) return;
+            let elapsed = Math.floor((Date.now() - startTimeMs) / 1000);
+            let rem = (timeLimitMinutes * 60) - elapsed;
+            if(timeLimitMinutes <= 0) rem = 999999;
+            
+            if(rem <= 0) {{
+                timerUI.innerText = "00m 00s"; timerUI.style.color = "#f87171";
+            }} else {{
+                let m = Math.floor(rem / 60); let s = rem % 60;
+                timerUI.innerText = (m < 10 ? '0'+m : m) + 'm ' + (s < 10 ? '0'+s : s) + 's';
+            }}
+        }}, 1000);
+
+        // PROCTORING LOGIC - Direct DOM Injection
         const rollNo = {js_roll_no};
         const lsKey = "quiz_strikes_" + rollNo;
         let strikes = parseInt(localStorage.getItem(lsKey) || "0");
@@ -2524,33 +2420,39 @@ def candidate_dashboard():
         function updateBadge() {{
             const b = document.getElementById("proctor-badge");
             if(!b) return;
-            if(strikes === 0) {{
-                b.innerHTML = "🟢 Shield Active • 0 Violations";
-                b.style.background = "#eef2ff"; b.style.color = "#4338ca";
-            }} else if(strikes === 1) {{
-                b.innerHTML = "⚠️ 1/2 Violations • Next = Lock";
-                b.style.background = "#fee2e2"; b.style.color = "#991b1b";
-            }} else {{
-                b.innerHTML = "🚨 2/2 Violations • Exam Locked";
-                b.style.background = "#991b1b"; b.style.color = "#ffffff";
-            }}
+            if(strikes === 0) {{ b.innerHTML = "🟢 Shield Active • 0 Violations"; b.style.background = "#eef2ff"; b.style.color = "#4338ca"; }} 
+            else if(strikes === 1) {{ b.innerHTML = "⚠️ 1/2 Violations • Next = Lock"; b.style.background = "#fee2e2"; b.style.color = "#991b1b"; }} 
+            else {{ b.innerHTML = "🚨 2/2 Violations • Exam Locked"; b.style.background = "#991b1b"; b.style.color = "#ffffff"; }}
         }}
         updateBadge();
 
-        // INJECT GIANT WARNING INTO PARENT WINDOW DOM TO ENSURE IT'S FULLSCREEN
+        function playAlertTone() {{
+            try {{
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+                osc.type = "sawtooth"; osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+                osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.45);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.45);
+            }} catch(e) {{}}
+        }}
+
         function showWarning() {{
+            playAlertTone();
             try {{
                 const pDoc = window.parent.document;
                 if(pDoc.getElementById('p-warn')) return;
                 const div = pDoc.createElement('div');
                 div.id = 'p-warn';
-                div.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.9); z-index:99999999; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(8px);";
+                div.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.95); z-index:99999999; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(8px);";
                 div.innerHTML = `
                     <div style="background:#fff; border-radius:20px; padding:40px; max-width:550px; text-align:center; border:2px solid #ef4444; font-family:sans-serif; box-shadow: 0 25px 50px -12px rgba(220,38,38,0.5);">
                         <div style="font-size:4rem; margin-bottom:12px;">⚠️</div>
                         <h2 style="color:#991b1b; margin-bottom:12px; font-weight:900;">PROCTORING WARNING</h2>
                         <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:8px; color:#b91c1c; font-weight:bold; margin-bottom:16px;">Strike 1 of 2 Recorded</div>
-                        <p style="color:#475569; font-size:1.1rem; margin-bottom:24px; line-height:1.6;">You switched tabs or left the window. This is your <b>final warning</b>. If you navigate away again, your exam will be permanently locked.</p>
+                        <p style="color:#475569; font-size:1.1rem; margin-bottom:24px; line-height:1.6;">You switched tabs or left the window. This is your <b>final warning</b>. If you navigate away again, your exam will be permanently locked and automatically submitted.</p>
                         <button id="p-warn-btn" style="background:linear-gradient(135deg, #dc2626, #991b1b); color:white; padding:14px 28px; border:none; border-radius:10px; font-size:1.1rem; font-weight:bold; cursor:pointer; width:100%; box-shadow: 0 4px 12px rgba(220,38,38,0.3);">I Understand (Return to Exam)</button>
                     </div>
                 `;
@@ -2559,12 +2461,43 @@ def candidate_dashboard():
             }} catch(e) {{}}
         }}
 
-        // ON 2ND STRIKE: WE UPDATE THE URL AND RELOAD. STREAMLIT SEES c_strikes=2 AND LOCKS EVERYTHING.
-        function lockExamAndReload() {{
+        // THIS IS THE BULLETPROOF LOCK - It injects the value directly into Streamlit and clicks submit
+        function forceSubmitAndLock() {{
+            playAlertTone();
             try {{
-                const url = new URL(window.parent.location.href);
-                url.searchParams.set("c_strikes", "2");
-                window.parent.location.href = url.toString();
+                const pDoc = window.parent.document;
+                
+                // 1. Show an unclosable full screen lock immediately
+                if(!pDoc.getElementById('p-lock')) {{
+                    const div = pDoc.createElement('div');
+                    div.id = 'p-lock';
+                    div.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.98); z-index:99999999; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(10px); color:white;";
+                    div.innerHTML = `
+                        <div style="background:#1e293b; border-radius:20px; padding:50px; max-width:550px; text-align:center; border:2px solid #ef4444; font-family:sans-serif;">
+                            <div style="font-size:4rem; margin-bottom:20px;">🚨</div>
+                            <h2 style="color:#ef4444; margin-bottom:12px; font-weight:900;">EXAMINATION LOCKED</h2>
+                            <p style="color:#cbd5e1; font-size:1.1rem; margin-bottom:24px; line-height:1.6;">Malpractice detected. You violated the proctoring shield twice. Your exam is being automatically submitted to the administrator.</p>
+                        </div>
+                    `;
+                    pDoc.body.appendChild(div);
+                }}
+
+                // 2. Find the hidden Streamlit input and inject the "2" violation flag
+                const inputs = Array.from(pDoc.querySelectorAll('input'));
+                const flagInput = inputs.find(i => i.getAttribute('aria-label') === 'violation_flag_input');
+                if(flagInput) {{
+                    const setter = Object.getOwnPropertyDescriptor(window.parent.HTMLInputElement.prototype, 'value').set;
+                    setter.call(flagInput, "2");
+                    flagInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                }}
+
+                // 3. Find the exact Streamlit Submit button and click it after 500ms (giving React time to read the flag)
+                setTimeout(() => {{
+                    const btns = Array.from(pDoc.querySelectorAll('button'));
+                    const submitBtn = btns.find(b => b.innerText.includes('Finalize & Submit'));
+                    if(submitBtn) submitBtn.click();
+                }}, 500);
+
             }} catch(e) {{}}
         }}
 
@@ -2574,21 +2507,13 @@ def candidate_dashboard():
             
             if(isHidden) {{
                 if(strikes === 1) {{
-                    strikes = 2;
-                    localStorage.setItem(lsKey, "2");
-                    lockExamAndReload();
+                    strikes = 2; localStorage.setItem(lsKey, "2"); updateBadge(); forceSubmitAndLock();
                 }}
             }} else {{
                 if(strikes === 0) {{
-                    strikes = 1;
-                    localStorage.setItem(lsKey, "1");
-                    updateBadge();
-                    showWarning();
+                    strikes = 1; localStorage.setItem(lsKey, "1"); updateBadge(); showWarning();
                 }} else if(strikes >= 2) {{
-                    try {{
-                        const url = new URL(window.parent.location.href);
-                        if(url.searchParams.get("c_strikes") !== "2") {{ lockExamAndReload(); }}
-                    }} catch(e) {{}}
+                    forceSubmitAndLock();
                 }}
             }}
         }}
@@ -2596,60 +2521,18 @@ def candidate_dashboard():
         if(!window.procInit) {{
             window.procInit = true;
             document.addEventListener("visibilitychange", handleVisChange);
-            try {{
-                if(window.parent && window.parent.document) {{ window.parent.document.addEventListener("visibilitychange", handleVisChange); }}
-            }} catch(e) {{}}
-        }}
-
-        const timerUI = document.getElementById("quiz-countdown");
-        const serverStartMs = {start_ts_ms};
-        const timeLimitMinutes = {time_limit};
-        const startKey = "quiz_start_time_" + rollNo;
-        
-        let startTimeMs = localStorage.getItem(startKey);
-        if(!startTimeMs) {{
-            startTimeMs = serverStartMs;
-            localStorage.setItem(startKey, startTimeMs);
-        }}
-
-        setInterval(() => {{
-            if(!timerUI) return;
-            let elapsed = Math.floor((Date.now() - startTimeMs) / 1000);
-            let rem = (timeLimitMinutes * 60) - elapsed;
-            if(timeLimitMinutes <= 0) rem = 999999;
+            try {{ if(window.parent && window.parent.document) window.parent.document.addEventListener("visibilitychange", handleVisChange); }} catch(e) {{}}
             
-            if(rem <= 0) {{
-                timerUI.innerText = "00m 00s";
-                timerUI.style.color = "#f87171";
-            }} else {{
-                let m = Math.floor(rem / 60); let s = rem % 60;
-                timerUI.innerText = (m < 10 ? '0'+m : m) + 'm ' + (s < 10 ? '0'+s : s) + 's';
-            }}
-        }}, 1000);
+            // If they reload the page and already have 2 strikes, instantly lock them out
+            if(strikes >= 2) {{ forceSubmitAndLock(); }}
+        }}
+
     }} catch(e) {{ console.error("Proctoring Execution Error: ", e); }}
     </script>
     """
     components.html(proctor_component_code, height=100)
 
-    # -------------------------------------------------------------
-    # PYTHON CATCHES THE 2ND STRIKE HERE AFTER RELOAD & SHOWS LOCKED SCREEN
-    # -------------------------------------------------------------
-    if locked_due_to_violations:
-        st.markdown("""
-            <div style="background: linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%); border: 2px solid #ef4444; border-radius: 16px; padding: 24px; text-align: center; margin-bottom: 24px; color: white; box-shadow: 0 10px 15px -3px rgba(220, 38, 38, 0.4);">
-                <div style="font-size: 3.5rem; margin-bottom: 8px;">🚨</div>
-                <h2 style="color: #ffffff; margin: 0 0 12px 0; font-weight: 800;">EXAMINATION LOCKED</h2>
-                <div style="background: rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; margin-bottom: 16px; font-weight: 600; color: #fca5a5;">
-                    Malpractice Detected: 2 Tab-Switch Violations
-                </div>
-                <p style="font-size: 1.05rem; margin: 0; line-height: 1.6; color: #fca5a5;">
-                    Your exam inputs have been permanently locked. 
-                    <br><b>You are required to scroll to the bottom and click the Submit button to finalize your exam.</b>
-                </p>
-            </div>
-        """, unsafe_allow_html=True)
-
-
+    # 2. EVALUATE & SCORE THE EXAM IN PYTHON
     def finalize_normal_exam(user_ans_dict, is_late=False, is_violation=False):
         score = 0.0
         correct_count = 0
@@ -2693,10 +2576,10 @@ def candidate_dashboard():
             st.rerun()
         except Exception as e: st.error(f"Failed to record examination score: {e}")
 
-    # DISABLING ALL INPUTS IF LOCKED
-    inputs_disabled = time_expired or locked_due_to_violations
-
     with st.form("quiz_form"):
+        # 3. HIDDEN VIOLATION FLAG INPUT - JS writes "2" to this when a violation occurs
+        v_flag = st.text_input("violation_flag_input", value="0", key="v_flag_input", label_visibility="hidden")
+
         user_answers = {}
         for i, q in enumerate(my_questions):
             safe_text = html.escape(q['text'])
@@ -2704,25 +2587,31 @@ def candidate_dashboard():
             neg_badge = f"<span class='badge-neg'>-{q['marks'] * 0.25} Negative Mark</span>" if q["type"] == "MCQ" else "<span class='badge-mark'>No Negative Penalty</span>"
             st.markdown(f"<div class='question-text-content'>Q{i + 1}. {safe_text} <span class='badge-mark'>{q['marks']} Marks</span> {neg_badge}</div>", unsafe_allow_html=True)
 
-            if q["type"] == "MCQ": user_answers[i] = st.radio(f"Options for Q{i + 1}", q.get("options") or [], index=None, key=f"q_{i}", label_visibility="collapsed", disabled=inputs_disabled)
-            elif q["type"] == "MSQ": user_answers[i] = st.multiselect(f"Options for Q{i + 1}", q.get("options") or [], key=f"q_{i}", label_visibility="collapsed", disabled=inputs_disabled)
+            if q["type"] == "MCQ": user_answers[i] = st.radio(f"Options for Q{i + 1}", q.get("options") or [], index=None, key=f"q_{i}", label_visibility="collapsed")
+            elif q["type"] == "MSQ": user_answers[i] = st.multiselect(f"Options for Q{i + 1}", q.get("options") or [], key=f"q_{i}", label_visibility="collapsed")
             elif q["type"] == "Numerical":
                 col_input, col_unit = st.columns([2, 5])
-                with col_input: user_answers[i] = st.text_input(f"Answer for Q{i + 1}", key=f"q_{i}", label_visibility="collapsed", disabled=inputs_disabled, placeholder="Numeric value")
+                with col_input: user_answers[i] = st.text_input(f"Answer for Q{i + 1}", key=f"q_{i}", label_visibility="collapsed", placeholder="Numeric value")
                 with col_unit:
                     if q.get("unit"): st.markdown(f"<div style='padding-top:6px; font-weight: 600; color: #475569;'>{html.escape(q['unit'])}</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-        # Note: Submit Button remains active so the user can finalize their locked exam
         submit_btn = st.form_submit_button("✅ Finalize & Submit Examination", type="primary", disabled=time_expired, use_container_width=True)
 
-        if submit_btn:
+        # 4. FINAL SUBMISSION CATCH
+        # If JS clicked the submit button, OR if the flag was changed to "2" dynamically
+        if submit_btn or st.session_state.v_flag_input == "2":
+            
+            # If the javascript set the hidden input to "2", flag the exam as malpractice
+            is_malpractice = (st.session_state.v_flag_input == "2")
+
             if time_limit > 0 and (time.time() - st.session_state.start_time) > (time_limit * 60) + 10:
                 st.error("Submission rejected. The examination window elapsed.")
-                finalize_normal_exam(user_answers, is_late=True, is_violation=locked_due_to_violations)
+                finalize_normal_exam(user_answers, is_late=True, is_violation=is_malpractice)
                 return
-            finalize_normal_exam(user_answers, is_late=False, is_violation=locked_due_to_violations)
+            
+            finalize_normal_exam(user_answers, is_late=False, is_violation=is_malpractice)
 
 # --- ROUTER ---
 if not st.session_state.logged_in: login_screen()
