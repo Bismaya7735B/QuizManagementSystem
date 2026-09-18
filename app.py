@@ -1659,12 +1659,12 @@
 #         candidate_dashboard()
 
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import time
 import html
 import json
 import re
+import urllib.parse
 from datetime import datetime
 from supabase import create_client, Client
 
@@ -1975,7 +1975,6 @@ def get_all_questions():
         st.error(f"Error fetching questions: {e}")
         return []
 
-
 def get_questions_by_branch(branch):
     norm = normalize_course_name(branch)
     try:
@@ -1988,21 +1987,17 @@ def get_questions_by_branch(branch):
         st.error(f"Error fetching branch questions: {e}")
         return []
 
-
 def add_question(q_data):
     q_data["branch"] = normalize_course_name(q_data.get("branch", ""))
     supabase.table("questions").insert(q_data).execute()
-
 
 def update_question(q_id, q_data):
     if "branch" in q_data:
         q_data["branch"] = normalize_course_name(q_data["branch"])
     supabase.table("questions").update(q_data).eq("id", q_id).execute()
 
-
 def delete_question(q_id):
     supabase.table("questions").delete().eq("id", q_id).execute()
-
 
 def get_all_settings():
     try:
@@ -2010,7 +2005,6 @@ def get_all_settings():
         return res.data or []
     except Exception:
         return []
-
 
 def get_branch_settings(branch):
     norm = normalize_course_name(branch)
@@ -2032,7 +2026,6 @@ def get_branch_settings(branch):
         pass
     return {"time_limit": 30, "passkey": ""}
 
-
 def save_branch_settings(branch, time_limit, passkey):
     norm = normalize_course_name(branch)
     payload = {
@@ -2042,7 +2035,6 @@ def save_branch_settings(branch, time_limit, passkey):
     }
     supabase.table("settings").upsert(payload).execute()
 
-
 def get_all_scores():
     try:
         res = supabase.table("scores").select("*").order("score", desc=True).execute()
@@ -2050,7 +2042,6 @@ def get_all_scores():
     except Exception as e:
         st.error(f"Error fetching scores: {e}")
         return []
-
 
 def get_student_score(roll_no):
     try:
@@ -2060,7 +2051,6 @@ def get_student_score(roll_no):
     except Exception:
         pass
     return None
-
 
 def get_branch_scores(branch):
     norm = normalize_course_name(branch)
@@ -2073,15 +2063,12 @@ def get_branch_scores(branch):
     except Exception:
         return []
 
-
 def save_student_score(score_record):
     score_record["branch"] = normalize_course_name(score_record.get("branch", ""))
     supabase.table("scores").upsert(score_record).execute()
 
-
 def delete_student_score(roll_no):
     supabase.table("scores").delete().eq("roll_no", roll_no).execute()
-
 
 def delete_branch_data(branch):
     norm = normalize_course_name(branch)
@@ -2089,12 +2076,10 @@ def delete_branch_data(branch):
     supabase.table("scores").delete().ilike("branch", norm).execute()
     supabase.table("settings").delete().ilike("branch", norm).execute()
 
-
 def wipe_all_data():
     supabase.table("questions").delete().neq("id", -1).execute()
     supabase.table("scores").delete().neq("roll_no", "__none__").execute()
     supabase.table("settings").delete().neq("branch", "__none__").execute()
-
 
 def parse_saved_responses(responses_data):
     if not responses_data:
@@ -2107,7 +2092,6 @@ def parse_saved_responses(responses_data):
         except Exception:
             return {}
     return {}
-
 
 # --- PERSISTENT SESSION RESTORATION ---
 query_params = st.query_params
@@ -2146,7 +2130,6 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
 
 if "start_time" not in st.session_state:
     st.session_state.start_time = None
-
 
 def logout():
     st.session_state.logged_in = False
@@ -2862,152 +2845,79 @@ def candidate_dashboard():
 
     locked_due_to_violations = (current_strikes >= 2)
 
-    if locked_due_to_violations:
-        st.markdown("""
-            <div class="warning-card">
-                <div style="font-size: 2rem; margin-bottom: 4px;">🚨</div>
-                <h3 style="color: #991b1b; margin: 0 0 6px 0;">Examination Locked: Malpractice Detected</h3>
-                <p style="margin: 0; font-size: 0.95rem; line-height: 1.5;">
-                    You switched tabs or left the examination window 2 times after being warned. 
-                    <b>All question inputs are permanently locked. You are required to submit your examination now using the submit button below.</b>
-                </p>
-            </div>
-        """, unsafe_allow_html=True)
-
+    # -------------------------------------------------------------------------------------
+    # NATIVE SVG INJECTION FOR ADVANCED PROCTORING (BYPASSES IFRAME SANDBOX LIMITATIONS)
+    # -------------------------------------------------------------------------------------
     js_roll_no = json.dumps(roll_no)
     start_ts_ms = int(st.session_state.start_time * 1000)
 
-    # ADVANCED PROCTORING COMPONENT
-    proctor_component_code = f"""
-    <div style="
-        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
-        border-radius: 14px;
-        padding: 14px 20px;
-        text-align: center;
-        font-family: 'Plus Jakarta Sans', sans-serif;
-        color: #ffffff;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        margin-bottom: 12px;
-    ">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-            <div>
-                <span style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: #a5b4fc; font-weight: 600;">Time Remaining</span><br/>
-                <span id="quiz-countdown" style="font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.7rem; color: #38bdf8; letter-spacing: -0.02em;">--:--</span>
-            </div>
-            <div id="proctor-badge" style="
-                background: #eef2ff;
-                color: #4338ca;
-                padding: 6px 14px;
-                border-radius: 9999px;
-                font-size: 0.78rem;
-                font-weight: 700;
-                border: 1px solid #c7d2fe;
-                transition: all 0.3s ease;
-            ">
-                🟢 Proctoring Shield Active • 0 Violations
-            </div>
-        </div>
-    </div>
-
-    <script>
+    js_logic = f"""
+    (function() {{
         const rollNo = {js_roll_no};
         const serverStartMs = {start_ts_ms};
         const timeLimitMinutes = {time_limit};
 
-        const startKey = "quiz_start_time_" + rollNo;
-        let storedStart = localStorage.getItem(startKey);
-        let startTimeMs;
-        if (!storedStart) {{
-            startTimeMs = serverStartMs;
-            localStorage.setItem(startKey, String(startTimeMs));
-        }} else {{
-            startTimeMs = Math.min(parseInt(storedStart, 10), serverStartMs);
-            localStorage.setItem(startKey, String(startTimeMs));
-        }}
-
-        const display = document.getElementById('quiz-countdown');
-
-        function formatTime(secs) {{
-            const m = Math.floor(secs / 60);
-            const s = secs % 60;
-            return (m < 10 ? '0' : '') + m + 'm ' + (s < 10 ? '0' : '') + s + 's';
-        }}
-
-        function getRemainingSecs() {{
-            if (timeLimitMinutes <= 0) return 999999;
-            const elapsed = Math.floor((Date.now() - startTimeMs) / 1000);
-            return Math.max(0, (timeLimitMinutes * 60) - elapsed);
-        }}
-
-        function tick() {{
-            const remaining = getRemainingSecs();
-            if (remaining <= 0) {{
-                display.innerText = "00m 00s (Time Over)";
-                display.style.color = "#f87171";
-                clearInterval(timerInterval);
-                return;
-            }}
-            if (remaining <= 120) {{
-                display.style.color = "#f87171";
-            }}
-            display.innerText = formatTime(remaining);
-        }}
-        tick();
-        const timerInterval = setInterval(tick, 1000);
-
         const strikeKey = "quiz_strikes_" + rollNo;
         let strikes = parseInt(localStorage.getItem(strikeKey) || "0", 10);
 
-        // SYNC UPDATED: Safely reload the Python backend context to know 2nd strike happened
-        function syncStrikesToParent(strikeCount, forceReload = false) {{
-            try {{
-                const targetWin = (window.parent && window.parent.location) ? window.parent : window;
-                const url = new URL(targetWin.location.href);
-                let changed = false;
-                if (url.searchParams.get("c_strikes") !== String(strikeCount)) {{
-                    url.searchParams.set("c_strikes", String(strikeCount));
-                    changed = true;
-                }}
-                
-                if (forceReload) {{
-                    if (changed) {{
-                        targetWin.location.href = url.toString();
-                    }} else {{
-                        targetWin.location.reload();
-                    }}
-                }} else if (changed) {{
-                    targetWin.history.replaceState(null, "", url.toString());
-                }}
-            }} catch(e) {{}}
-        }}
-
-        let isAway = false;
-        let leaveTimestamp = 0;
-
-        function updateProctorBadge() {{
-            const badge = document.getElementById("proctor-badge");
-            if (!badge) return;
-            if (strikes === 0) {{
-                badge.innerHTML = "🟢 Proctoring Shield Active • 0 Violations";
-                badge.style.background = "#eef2ff";
-                badge.style.color = "#4338ca";
-                badge.style.borderColor = "#c7d2fe";
-            }} else if (strikes === 1) {{
-                badge.innerHTML = "⚠️ Strike 1/2 Recorded • Next Switch = Exam Lock";
-                badge.style.background = "#fee2e2";
-                badge.style.color = "#991b1b";
-                badge.style.borderColor = "#f87171";
-            }} else {{
-                badge.innerHTML = "🚨 Strike 2/2 • Exam Locked (Submission Required)";
-                badge.style.background = "#991b1b";
-                badge.style.color = "#ffffff";
-                badge.style.borderColor = "#7f1d1d";
+        function syncStrikes(c) {{
+            const url = new URL(window.location.href);
+            if (url.searchParams.get("c_strikes") !== String(c)) {{
+                url.searchParams.set("c_strikes", String(c));
+                window.history.replaceState(null, "", url.toString());
             }}
         }}
-        updateProctorBadge();
 
-        function playAlertTone() {{
+        function updateUI() {{
+            const badge = document.getElementById("proctor-badge");
+            if (badge) {{
+                if (strikes === 0) {{
+                    badge.innerHTML = "🟢 Shield Active • 0 Violations";
+                    badge.style.background = "#eef2ff";
+                    badge.style.color = "#4338ca";
+                }} else if (strikes === 1) {{
+                    badge.innerHTML = "⚠️ 1/2 Violations • Next = Lock";
+                    badge.style.background = "#fee2e2";
+                    badge.style.color = "#991b1b";
+                }} else {{
+                    badge.innerHTML = "🚨 2/2 Violations • Exam Locked";
+                    badge.style.background = "#991b1b";
+                    badge.style.color = "#ffffff";
+                }}
+            }}
+        }}
+
+        function lockExam() {{
+            if (document.getElementById("p-lock")) return;
+            const o = document.createElement("div");
+            o.id = "p-lock";
+            o.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.92);z-index:999999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(5px);";
+            o.innerHTML = `
+                <div style="background:#fff;border-radius:16px;padding:30px;max-width:500px;text-align:center;border:2px solid #ef4444;font-family:sans-serif;box-shadow:0 25px 50px -12px rgba(220,38,38,0.5);">
+                    <div style="font-size:3.5rem;margin-bottom:10px;">🚨</div>
+                    <h2 style="color:#991b1b;margin-bottom:10px;font-weight:800;">EXAMINATION LOCKED</h2>
+                    <p style="margin-bottom:20px;color:#475569;font-size:1.05rem;line-height:1.5;">Malpractice detected. You violated the proctoring shield twice. All inputs are permanently locked.</p>
+                    <button id="p-force-btn" style="background:linear-gradient(135deg, #dc2626, #b91c1c);color:white;padding:14px 28px;border:none;border-radius:10px;font-weight:bold;font-size:1.1rem;cursor:pointer;width:100%;">Finalize & Submit Examination</button>
+                </div>
+            `;
+            document.body.appendChild(o);
+            
+            // Disable all inputs
+            const inputs = document.querySelectorAll('input:not([type="submit"]), select, textarea');
+            inputs.forEach(el => {{ el.disabled = true; }});
+            
+            document.getElementById("p-force-btn").onclick = function() {{
+                o.remove();
+                const btns = Array.from(document.querySelectorAll('button'));
+                const stBtn = btns.find(b => b.innerText.includes('Finalize & Submit') || b.getAttribute('kind') === 'primaryFormSubmit');
+                if(stBtn) stBtn.click();
+            }};
+        }}
+
+        function warnExam() {{
+            if (document.getElementById("p-warn")) return;
+            
+            // Play alert sound
             try {{
                 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 const osc = audioCtx.createOscillator();
@@ -3022,162 +2932,110 @@ def candidate_dashboard():
                 osc.start();
                 osc.stop(audioCtx.currentTime + 0.45);
             }} catch(e) {{}}
+
+            const o = document.createElement("div");
+            o.id = "p-warn";
+            o.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.85);z-index:999999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(5px);";
+            o.innerHTML = `
+                <div style="background:#fff;border-radius:16px;padding:30px;max-width:500px;text-align:center;border:2px solid #ef4444;font-family:sans-serif;">
+                    <div style="font-size:3.2rem;margin-bottom:10px;">⚠️</div>
+                    <h2 style="color:#991b1b;margin-bottom:10px;font-weight:800;">WARNING RECORDED</h2>
+                    <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:8px 12px; color:#b91c1c; font-weight:700; font-size:0.92rem; margin-bottom:14px;">Strike 1 of 2 Recorded</div>
+                    <p style="margin-bottom:20px;color:#475569;font-size:1.05rem;line-height:1.5;">You switched tabs or left the window. This is your final warning. If you navigate away again, your exam will be permanently locked.</p>
+                    <button id="p-warn-btn" style="background:linear-gradient(135deg, #dc2626, #b91c1c);color:white;padding:12px 24px;border:none;border-radius:10px;font-weight:bold;font-size:1.1rem;cursor:pointer;width:100%;">I Understand (Return)</button>
+                </div>
+            `;
+            document.body.appendChild(o);
+            document.getElementById("p-warn-btn").onclick = function() {{ o.remove(); }};
         }}
 
-        function showWarningModal(awayDuration) {{
-            playAlertTone();
-            const targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
-            const existing = targetDoc.getElementById("proctor-warning-modal-overlay");
-            if (existing) existing.remove();
-
-            const overlay = targetDoc.createElement("div");
-            overlay.id = "proctor-warning-modal-overlay";
-            overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.85); backdrop-filter:blur(8px); z-index:99999999; display:flex; align-items:center; justify-content:center; font-family:'Plus Jakarta Sans', sans-serif;";
-
-            overlay.innerHTML = '<div style="background:#ffffff; border-radius:20px; max-width:520px; width:90%; padding:32px 28px; text-align:center; box-shadow:0 25px 50px -12px rgba(220,38,38,0.35); border:2px solid #ef4444;">' +
-                '<div style="font-size:3.2rem; line-height:1; margin-bottom:10px;">⚠️</div>' +
-                '<h2 style="color:#991b1b; font-size:1.55rem; font-weight:800; margin:0 0 10px 0;">PROCTORING VIOLATION DETECTED</h2>' +
-                '<div style="background:#fef2f2; border:1px solid #fecaca; border-radius:12px; padding:10px 16px; color:#b91c1c; font-weight:700; font-size:0.92rem; margin-bottom:14px;">' +
-                    'Strike 1 of 2 Recorded • Navigated Away for ' + awayDuration + 's' +
-                '</div>' +
-                '<p style="color:#475569; font-size:0.95rem; line-height:1.6; margin-bottom:22px;">' +
-                    'You switched tabs or navigated away from the examination window. ' +
-                    '<br/><br/><b style="color:#dc2626;">This is your final warning. If you switch tabs one more time, all questions will be permanently locked and you will be required to submit your exam immediately.</b>' +
-                '</p>' +
-                '<button id="ack-warning-btn" style="background:linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); color:#ffffff; border:none; padding:13px 26px; font-size:1rem; font-weight:700; border-radius:12px; cursor:pointer; width:100%; box-shadow:0 4px 14px rgba(220,38,38,0.3);">' +
-                    'I Understand & Acknowledge (Return to Quiz)' +
-                '</button>' +
-            '</div>';
-
-            targetDoc.body.appendChild(overlay);
-
-            const ackBtn = targetDoc.getElementById("ack-warning-btn");
-            if (ackBtn) {{
-                ackBtn.onclick = function() {{
-                    overlay.remove();
-                }};
-            }}
-        }}
-
-        function lockExamAndPromptSubmit() {{
-            playAlertTone();
-            const targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
-
-            const existingWarn = targetDoc.getElementById("proctor-warning-modal-overlay");
-            if (existingWarn) existingWarn.remove();
-
-            const inputs = targetDoc.querySelectorAll('input:not([type="submit"]), select, textarea');
-            inputs.forEach(el => {{ el.disabled = true; }});
-
-            const existingLock = targetDoc.getElementById("proctor-lock-overlay");
-            if (!existingLock) {{
-                const lockOverlay = targetDoc.createElement("div");
-                lockOverlay.id = "proctor-lock-overlay";
-                lockOverlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.92); backdrop-filter:blur(10px); z-index:99999999; display:flex; align-items:center; justify-content:center; font-family:'Plus Jakarta Sans', sans-serif;";
-
-                lockOverlay.innerHTML = '<div style="background:#ffffff; border-radius:20px; max-width:520px; width:90%; padding:36px 28px; text-align:center; box-shadow:0 25px 50px -12px rgba(220,38,38,0.4); border:2px solid #ef4444;">' +
-                    '<div style="font-size:3.5rem; line-height:1; margin-bottom:12px;">🚨</div>' +
-                    '<h2 style="color:#991b1b; font-size:1.6rem; font-weight:800; margin:0 0 10px 0;">EXAMINATION LOCKED</h2>' +
-                    '<div style="background:#fee2e2; border:1px solid #fca5a5; border-radius:12px; padding:10px 16px; color:#991b1b; font-weight:700; font-size:0.92rem; margin-bottom:16px;">' +
-                        'Proctoring Limit Exceeded (Strike 2 of 2)' +
-                    '</div>' +
-                    '<p style="color:#475569; font-size:0.95rem; line-height:1.6; margin-bottom:24px;">' +
-                        'You switched tabs again after receiving a warning. All question inputs are now locked. ' +
-                        '<br/><br/><b>You must now finalize and submit your examination.</b>' +
-                    '</p>' +
-                    '<button id="proctor-force-submit-btn" style="background:linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); color:#ffffff; border:none; padding:14px 28px; font-size:1.05rem; font-weight:700; border-radius:12px; cursor:pointer; width:100%; box-shadow:0 4px 14px rgba(220,38,38,0.35);">' +
-                        '📝 Submit Examination Now' +
-                    '</button>' +
-                '</div>';
-
-                targetDoc.body.appendChild(lockOverlay);
-
-                const forceBtn = targetDoc.getElementById("proctor-force-submit-btn");
-                if (forceBtn) {{
-                    forceBtn.onclick = function() {{
-                        lockOverlay.remove();
-                        
-                        const allButtons = Array.from(targetDoc.querySelectorAll('button'));
-                        const submitButton = allButtons.find(btn => 
-                            btn.innerText.includes('Finalize & Submit') || 
-                            btn.getAttribute('kind') === 'primaryFormSubmit' ||
-                            btn.getAttribute('data-testid') === 'baseButton-primaryFormSubmit'
-                        );
-
-                        if (submitButton) {{
-                            submitButton.click(); 
-                        }} else {{
-                            syncStrikesToParent(2, true);
+        let isAway = document.hidden;
+        
+        // Ensure event listeners are attached exactly once to the native DOM
+        if(!window.proctorInit_{st.session_state.user_id}) {{
+            window.proctorInit_{st.session_state.user_id} = true;
+            
+            document.addEventListener("visibilitychange", function() {{
+                if (document.hidden) {{
+                    if (!isAway) {{
+                        isAway = true;
+                        if (strikes === 1) {{
+                            strikes = 2;
+                            localStorage.setItem(strikeKey, "2");
+                            syncStrikes(2);
+                            lockExam();
+                            updateUI();
                         }}
-                    }};
-                }}
-            }}
-        }}
-
-        if (strikes >= 2) {{
-            lockExamAndPromptSubmit();
-        }}
-
-        function handleTabDeparture() {{
-            if (!isAway) {{
-                isAway = true;
-                leaveTimestamp = Date.now();
-
-                if (strikes === 1) {{
-                    strikes = 2;
-                    localStorage.setItem(strikeKey, "2");
-                    syncStrikesToParent(2, true); // <--- FORCE RELOADS BACKEND WITH C_STRIKES=2
-                }}
-            }}
-        }}
-
-        function handleTabReturn() {{
-            if (isAway) {{
-                isAway = false;
-                const awaySecs = Math.max(1, Math.round((Date.now() - leaveTimestamp) / 1000));
-
-                if (strikes === 0) {{
-                    strikes = 1;
-                    localStorage.setItem(strikeKey, "1");
-                    updateProctorBadge();
-                    syncStrikesToParent(1, false); // Just updates URL behind the scenes
-                    showWarningModal(awaySecs);
-                }} else if (strikes >= 2) {{
-                    syncStrikesToParent(2, true); // Syncs backend
-                }}
-            }}
-        }}
-
-        document.addEventListener("visibilitychange", function() {{
-            if (document.hidden) {{
-                handleTabDeparture();
-            }} else {{
-                handleTabReturn();
-            }}
-        }});
-
-        try {{
-            if (window.parent && window.parent.document) {{
-                window.parent.document.addEventListener("visibilitychange", function() {{
-                    if (window.parent.document.hidden) {{
-                        handleTabDeparture();
-                    }} else {{
-                        handleTabReturn();
                     }}
-                }});
-
-                window.parent.addEventListener("blur", function() {{
-                    setTimeout(() => {{
-                        if (window.parent && window.parent.document && window.parent.document.hidden) {{
-                            handleTabDeparture();
+                }} else {{
+                    if (isAway) {{
+                        isAway = false;
+                        if (strikes === 0) {{
+                            strikes = 1;
+                            localStorage.setItem(strikeKey, "1");
+                            syncStrikes(1);
+                            updateUI();
+                            warnExam();
+                        }} else if (strikes >= 2) {{
+                            syncStrikes(2);
+                            lockExam();
+                            updateUI();
                         }}
-                    }}, 300);
-                }});
+                    }}
+                }}
+            }});
+        }}
+
+        updateUI();
+        if(strikes >= 2) {{
+            syncStrikes(2);
+            lockExam();
+        }}
+
+        const startKey = "quiz_start_time_" + rollNo;
+        let storedStart = localStorage.getItem(startKey);
+        let startTimeMs = storedStart ? Math.min(parseInt(storedStart, 10), serverStartMs) : serverStartMs;
+        localStorage.setItem(startKey, String(startTimeMs));
+
+        setInterval(() => {{
+            const display = document.getElementById('quiz-countdown');
+            if(!display) return;
+            let elapsed = Math.floor((Date.now() - startTimeMs) / 1000);
+            let rem = Math.max(0, (timeLimitMinutes * 60) - elapsed);
+            if (timeLimitMinutes <= 0) rem = 999999;
+            
+            if (rem <= 0) {{
+                display.innerText = "00m 00s";
+                display.style.color = "#f87171";
+            }} else {{
+                let m = Math.floor(rem / 60);
+                let s = rem % 60;
+                display.innerText = (m < 10 ? '0'+m : m) + 'm ' + (s < 10 ? '0'+s : s) + 's';
             }}
-        }} catch(e) {{}}
-    </script>
+        }}, 1000);
+    }})();
     """
-    components.html(proctor_component_code, height=100)
+
+    encoded_js = urllib.parse.quote(js_logic)
+    
+    # We render the UI directly inside Streamlit's markdown (not an iframe), 
+    # and use an SVG onload event to execute the JavaScript natively.
+    timer_ui = f"""
+    <div style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); border-radius: 14px; padding: 14px 20px; text-align: center; color: #ffffff; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); border: 1px solid rgba(255, 255, 255, 0.1); margin-bottom: 12px; font-family: 'Plus Jakarta Sans', sans-serif;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+            <div>
+                <span style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: #a5b4fc; font-weight: 600;">Time Remaining</span><br/>
+                <span id="quiz-countdown" style="font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.7rem; color: #38bdf8; letter-spacing: -0.02em;">--:--</span>
+            </div>
+            <div id="proctor-badge" style="background: #eef2ff; color: #4338ca; padding: 6px 14px; border-radius: 9999px; font-size: 0.78rem; font-weight: 700; border: 1px solid #c7d2fe; transition: all 0.3s ease;">
+                🟢 Shield Active • 0 Violations
+            </div>
+        </div>
+    </div>
+    <svg onload="eval(decodeURIComponent('{encoded_js}'))" style="display:none;"></svg>
+    """
+    st.markdown(timer_ui, unsafe_allow_html=True)
+
 
     def finalize_normal_exam(user_ans_dict, is_late=False, is_violation=False):
         score = 0.0
@@ -3217,6 +3075,7 @@ def candidate_dashboard():
                     score -= penalty
                     total_deducted += penalty
 
+        # Correctly Flag For Admin Analytics
         if is_violation:
             status_text = "🚨 Forced Submitted (Malpractice)"
         elif is_late:
